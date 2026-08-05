@@ -47,6 +47,8 @@ import { supabasePlugin } from './plugins/supabase-plugin';
 import { ChannelGateway } from './channels/gateway';
 import { FeishuChannel } from './channels/feishu';
 import { createChannelCommands } from './commands/channel';
+import { HookPipeline } from './security/hooks';
+import { createSecurityCommands } from './commands/security';
 
 const deepSeek = createOpenAI({
     baseURL: process.env.LLM_API_BASE,
@@ -90,6 +92,32 @@ const activeSkills = new Set<string>();
 const pluginManager = new PluginManager(registry);
 const availablePlugins = new Map<string, PluginDefinition>([['supabase', supabasePlugin]]);
 
+// ── Security: Hook Pipeline ────────────────────────────────
+const hookPipeline = new HookPipeline();
+
+// 示例 Pre Hook: 写文件前记录日志
+hookPipeline.registerPre('audit-log', (toolName, input) => {
+    if (toolName === 'write_file' || toolName === 'edit_file') {
+        const path = (input as any)?.path || 'unknown';
+        console.log(`  [audit] 文件写入操作: ${toolName} → ${path}`);
+    }
+    return { action: 'allow' };
+});
+
+// 示例 Post Hook: 给 bash 输出加时间戳
+hookPipeline.registerPost('bash-timestamp', (toolName, _input, output) => {
+    if (toolName === 'bash') {
+        const timestamp = new Date().toISOString();
+        return {
+            action: 'modify',
+            modifiedOutput: `[${timestamp}]\n${output}`,
+        };
+    }
+    return { action: 'allow' };
+});
+
+registry.setHookPipeline(hookPipeline);
+
 // ── Prompt Builder ────────────────────────────────
 const builder = new PromptBuilder()
     .pipe('coreRules', coreRules())
@@ -125,6 +153,7 @@ const dispatch = createDispatcher([
     ...createSkillCommands(skillLoader, activeSkills),
     ...createPluginCommands(pluginManager, availablePlugins),
     ...createChannelCommands(gateway),
+    ...createSecurityCommands(registry, hookPipeline),
 ]);
 
 function makePromptCtx(): PromptContext {
@@ -211,21 +240,27 @@ async function main() {
         });
     }
 
-    console.log('Super Agent v0.16 — Channel (type "exit" to quit)');
-    console.log('快捷命令：');
-    console.log('  /channel         — 查看通道状态');
-    console.log('  /plugin          — 查看插件');
-    console.log('  /skill           — 查看 skills');
-    console.log('  /memory          — 查看记忆');
-    console.log('  /context         — context 占用矩阵');
-    console.log('');
-    console.log(`  Dashboard: http://localhost:${FEISHU_PORT}`);
-    console.log('  打开浏览器发送测试消息，或在终端直接对话');
-    console.log('');
+    const role = registry.getRole();
+    const toolCount = registry.getActiveTools().length;
+    const hooks = hookPipeline.list();
 
-    if (loadedSkills.length > 0) {
-        console.log(`  发现 ${loadedSkills.length} 个 skill`);
-    }
+    console.log('Super Agent v0.17 — Permissions & Hooks (type "exit" to quit)');
+    console.log('快捷命令：');
+    console.log('  /role [角色]      — 查看/切换角色 (owner|collaborator|guest)');
+    console.log('  /hooks            — 查看 Hook 管线');
+    console.log('  /channel          — 查看通道');
+    console.log('  /plugin           — 查看插件');
+    console.log('  /skill            — 查看 skills');
+    console.log('  /memory           — 查看记忆');
+    console.log('');
+    console.log(`  当前角色: ${role}，可用工具: ${toolCount} 个`);
+    console.log(`  Hook: ${hooks.pre.length} 个 pre + ${hooks.post.length} 个 post`);
+    console.log('');
+    console.log('  试试：');
+    console.log('    /role guest        — 切换到 guest，bash 等工具被禁用');
+    console.log('    测试bash           — 执行 echo，会触发 post hook 加时间戳');
+    console.log('    测试危险命令        — 模型尝试 rm -rf，会被 bash classifier 拦截');
+    console.log('');
 
     if (fs.existsSync('docs')) {
         const files = fs.readdirSync('docs').filter((f) => f.endsWith('.md'));
