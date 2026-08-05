@@ -52,6 +52,10 @@ import { createSecurityCommands } from './commands/security';
 import { CronService } from './cron/service';
 import { createCronTool } from './tools/cron-tools';
 import { createCronCommands } from './commands/cron';
+import { SubAgentRegistry } from './agents/registry';
+import { SpawnContext } from './agents/spawn';
+import { createSpawnTool } from './tools/spawn-tools';
+import { createAgentCommands } from './commands/agents';
 
 const deepSeek = createOpenAI({
     baseURL: process.env.LLM_API_BASE,
@@ -63,14 +67,17 @@ const model = deepSeek.chat(process.env.LLM_MODEL ?? 'deepseek-v4-flash');
 // mock
 // const model = createMockModel();
 
+// ── Registry ────────────────────────────────────────
 const registry = new ToolRegistry();
 registry.register(...allTools);
 registry.register(createToolSearchTool(registry));
 
+// ── Memory ────────────────────────────────────────
 const memoryStore = new MemoryStore('.');
 memoryStore.init();
 registry.register(createMemoryTool(memoryStore));
 
+// ── RAG ────────────────────────────────────────
 const vectorStore = new VectorStore();
 const embedFn = process.env.DASHSCOPE_API_KEY
     ? createDashScopeEmbedder(process.env.DASHSCOPE_API_KEY)
@@ -83,13 +90,16 @@ async function connectMCP() {
     console.log(`  已注册 ${tools.length} 个 Mock MCP 工具`);
 }
 
+// ── Skills ────────────────────────────────────────
 const skillLoader = new SkillLoader('.');
 const loadedSkills = skillLoader.load();
 const activeSkills = new Set<string>();
 
+// ── Plugins ────────────────────────────────────────
 const pluginManager = new PluginManager(registry);
 const availablePlugins = new Map<string, PluginDefinition>([['supabase', supabasePlugin]]);
 
+// ── Security: Hook Pipeline ────────────────────────────────────────
 const hookPipeline = new HookPipeline();
 
 hookPipeline.registerPre('audit-log', (toolName, input) => {
@@ -103,17 +113,36 @@ hookPipeline.registerPre('audit-log', (toolName, input) => {
 hookPipeline.registerPost('bash-timestamp', (toolName, _input, output) => {
     if (toolName === 'bash') {
         const timestamp = new Date().toISOString();
-        return { action: 'modify', modifiedOutput: `[${timestamp}]\n${output}` };
+        return {
+            action: 'modify',
+            modifiedOutput: `[${timestamp}]\n${output}`,
+        };
     }
     return { action: 'allow' };
 });
 
 registry.setHookPipeline(hookPipeline);
 
-// ── Cron Service ────────────────────────────────
+// ── Cron Service ────────────────────────────────────────
 const cronService = new CronService('.');
 registry.register(createCronTool(cronService));
 
+// ── Sub-Agent ────────────────────────────────────────
+const agentRegistry = new SubAgentRegistry({ maxSpawnDepth: 1, maxConcurrent: 3 });
+
+function getSpawnCtx(): SpawnContext {
+    return {
+        model,
+        registry,
+        agentRegistry,
+        buildSystem: () => builder.build(makePromptCtx()),
+        currentDepth: 0,
+    };
+}
+
+registry.register(createSpawnTool(agentRegistry, getSpawnCtx));
+
+// ── Prompt Builder ────────────────────────────────────────
 const builder = new PromptBuilder()
     .pipe('coreRules', coreRules())
     .pipe('toolGuide', toolGuide())
@@ -123,6 +152,7 @@ const builder = new PromptBuilder()
     .pipe('skillContext', () => skillLoader.buildPromptSection(activeSkills))
     .pipe('sessionContext', sessionContext());
 
+// ── Channel Gateway ────────────────────────────────────────
 const gateway = new ChannelGateway({
     model,
     registry,
@@ -137,6 +167,7 @@ const feishuChannel = new FeishuChannel({
 });
 gateway.register(feishuChannel);
 
+// ── Commands ────────────────────────────────────────
 const dispatch = createDispatcher([
     ...debugCommands,
     ...contextCommands,
@@ -148,6 +179,7 @@ const dispatch = createDispatcher([
     ...createChannelCommands(gateway),
     ...createSecurityCommands(registry, hookPipeline),
     ...createCronCommands(cronService),
+    ...createAgentCommands(agentRegistry),
 ]);
 
 function makePromptCtx(): PromptContext {
@@ -161,6 +193,8 @@ function makePromptCtx(): PromptContext {
 
 async function main() {
     await connectMCP();
+
+    // 加载插件
     console.log('  加载插件...');
     for (const [name, def] of availablePlugins) {
         try {
@@ -171,9 +205,11 @@ async function main() {
         }
     }
 
+    // 启动 Channel
     console.log('  启动 Channel...');
     await gateway.startAll();
 
+    // 启动 Cron
     cronService.load();
     cronService.setExecutor({
         runAgentPrompt: async (prompt, timeout) => {
@@ -199,12 +235,12 @@ async function main() {
     });
     cronService.start();
     const cronJobs = cronService.list();
-    console.log(`  Cron: ${cronJobs.length} 个任务已加载`);
 
     const store = new SessionStore('default');
     let messages: ModelMessage[] = [];
     const timestamps = new Map<number, number>();
     const tracker = new UsageTracker('.usage/today.jsonl');
+
     const rl = createInterface({ input: process.stdin, output: process.stdout });
 
     function ask() {
@@ -218,6 +254,7 @@ async function main() {
                 rl.close();
                 return;
             }
+
             const ctx: CommandContext = {
                 messages,
                 timestamps,
@@ -251,6 +288,7 @@ async function main() {
             const now = Date.now();
             for (let i = beforeLen; i < messages.length; i++) timestamps.set(i, now);
             store.appendAll(newMessages);
+
             console.log(`  [Token] ~${estimateMessageTokens(messages)} tokens`);
             ask();
         });
@@ -260,21 +298,20 @@ async function main() {
     const toolCount = registry.getActiveTools().length;
     const hooks = hookPipeline.list();
 
-    console.log('Super Agent v0.18 — Cron 定时任务 (type "exit" to quit)');
+    console.log('Super Agent v0.19 — Sub-Agent (type "exit" to quit)');
     console.log('快捷命令：');
+    console.log('  /agents           — 查看子 Agent 记录');
     console.log('  /cron             — 查看定时任务');
-    console.log('  /cron logs        — 查看执行记录');
     console.log('  /role [角色]      — 查看/切换角色');
-    console.log('  /hooks            — 查看 Hook 管线');
     console.log('');
     console.log(`  当前角色: ${role}，可用工具: ${toolCount} 个`);
-    console.log(`  Hook: ${hooks.pre.length} 个 pre + ${hooks.post.length} 个 post`);
-    console.log(`  Cron: ${cronJobs.length} 个定时任务`);
+    console.log(
+        `  Sub-Agent: 最大深度 ${agentRegistry.getConfig().maxSpawnDepth}，最大并发 ${agentRegistry.getConfig().maxConcurrent}`,
+    );
     console.log('');
     console.log('  试试：');
-    console.log('    让 Agent 创建一个每 30 秒执行的定时任务');
-    console.log('    /cron         — 查看当前任务列表');
-    console.log('    /cron logs    — 查看执行记录');
+    console.log('    帮我对比 Hono、Fastify 和 Express 的性能和生态');
+    console.log('    /agents       — 查看子 Agent 执行记录');
     console.log('');
 
     if (fs.existsSync('docs')) {
@@ -296,6 +333,7 @@ async function main() {
             console.log(`  知识库就绪，共 ${vectorStore.size()} 个片段\n`);
         }
     }
+
     ask();
 }
 

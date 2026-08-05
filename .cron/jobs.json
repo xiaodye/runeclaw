@@ -1,16 +1,16 @@
 {
-  "jobs": [
-    {
-      "id": "quote-every-30s",
-      "name": "名言定时任务",
-      "schedule": "every 30s",
-      "scheduleType": "interval",
-      "enabled": true,
-      "payload": {
-        "type": "handler",
-        "handler": "random-quote"
-      },
-      "source": "runtime"
-    }
-  ]
+    "jobs": [
+        {
+            "id": "quote-every-30s",
+            "name": "名言定时任务",
+            "schedule": "every 30s",
+            "scheduleType": "interval",
+            "enabled": false,
+            "payload": {
+                "type": "handler",
+                "handler": "random-quote"
+            },
+            "source": "runtime"
+        }
+    ]
 }

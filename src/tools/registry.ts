@@ -1,9 +1,9 @@
 import { jsonSchema } from 'ai';
-import type { MCPClient, MockMCPClient } from './mcp-client';
-import type { HookPipeline } from '../security/hooks';
-import type { Role } from '../security/roles';
-import { canUseTool } from '../security/roles';
-import { classifyBashCommand } from '../security/bash-classifier';
+import type { MCPClient, MockMCPClient } from './mcp-client.js';
+import type { HookPipeline } from '../security/hooks.js';
+import type { Role } from '../security/roles.js';
+import { canUseTool } from '../security/roles.js';
+import { classifyBashCommand } from '../security/bash-classifier.js';
 
 export interface ToolDefinition {
     name: string;
@@ -225,6 +225,28 @@ export class ToolRegistry {
     private drainQueue(): void {
         const waiting = this.waitQueue.splice(0);
         for (const resolve of waiting) resolve();
+    }
+
+    toAISDKFormatUnlocked(excludeTools?: Set<string>): Record<string, any> {
+        const result: Record<string, any> = {};
+        const activeTools = this.getActiveTools().filter(
+            (t) => !excludeTools || !excludeTools.has(t.name),
+        );
+
+        for (const tool of activeTools) {
+            const maxChars = tool.maxResultChars;
+            const executeFn = tool.execute;
+            result[tool.name] = {
+                description: tool.description,
+                inputSchema: jsonSchema(tool.parameters as any),
+                execute: async (input: any) => {
+                    const raw = await executeFn(input);
+                    const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+                    return truncateResult(text, maxChars);
+                },
+            };
+        }
+        return result;
     }
 
     toAISDKFormat(): Record<string, any> {
