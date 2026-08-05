@@ -47,6 +47,15 @@ import { supabasePlugin } from './plugins/supabase-plugin';
 import { ChannelGateway } from './channels/gateway';
 import { FeishuChannel } from './channels/feishu';
 import { createChannelCommands } from './commands/channel';
+import { HookPipeline } from './security/hooks';
+import { createSecurityCommands } from './commands/security';
+import { CronService } from './cron/service';
+import { createCronTool } from './tools/cron-tools';
+import { createCronCommands } from './commands/cron';
+import { SubAgentRegistry } from './agents/registry';
+import { SpawnContext } from './agents/spawn';
+import { createSpawnTool } from './tools/spawn-tools';
+import { createAgentCommands } from './commands/agents';
 
 const deepSeek = createOpenAI({
     baseURL: process.env.LLM_API_BASE,
@@ -58,17 +67,17 @@ const model = deepSeek.chat(process.env.LLM_MODEL ?? 'deepseek-v4-flash');
 // mock
 // const model = createMockModel();
 
-// ── Registry ────────────────────────────────
+// ── Registry ────────────────────────────────────────
 const registry = new ToolRegistry();
 registry.register(...allTools);
 registry.register(createToolSearchTool(registry));
 
-// ── Memory ────────────────────────────────
+// ── Memory ────────────────────────────────────────
 const memoryStore = new MemoryStore('.');
 memoryStore.init();
 registry.register(createMemoryTool(memoryStore));
 
-// ── RAG ────────────────────────────────
+// ── RAG ────────────────────────────────────────
 const vectorStore = new VectorStore();
 const embedFn = process.env.DASHSCOPE_API_KEY
     ? createDashScopeEmbedder(process.env.DASHSCOPE_API_KEY)
@@ -81,16 +90,59 @@ async function connectMCP() {
     console.log(`  已注册 ${tools.length} 个 Mock MCP 工具`);
 }
 
-// ── Skills ────────────────────────────────
+// ── Skills ────────────────────────────────────────
 const skillLoader = new SkillLoader('.');
 const loadedSkills = skillLoader.load();
 const activeSkills = new Set<string>();
 
-// ── Plugins ────────────────────────────────
+// ── Plugins ────────────────────────────────────────
 const pluginManager = new PluginManager(registry);
 const availablePlugins = new Map<string, PluginDefinition>([['supabase', supabasePlugin]]);
 
-// ── Prompt Builder ────────────────────────────────
+// ── Security: Hook Pipeline ────────────────────────────────────────
+const hookPipeline = new HookPipeline();
+
+hookPipeline.registerPre('audit-log', (toolName, input) => {
+    if (toolName === 'write_file' || toolName === 'edit_file') {
+        const path = (input as any)?.path || 'unknown';
+        console.log(`  [audit] 文件写入操作: ${toolName} → ${path}`);
+    }
+    return { action: 'allow' };
+});
+
+hookPipeline.registerPost('bash-timestamp', (toolName, _input, output) => {
+    if (toolName === 'bash') {
+        const timestamp = new Date().toISOString();
+        return {
+            action: 'modify',
+            modifiedOutput: `[${timestamp}]\n${output}`,
+        };
+    }
+    return { action: 'allow' };
+});
+
+registry.setHookPipeline(hookPipeline);
+
+// ── Cron Service ────────────────────────────────────────
+const cronService = new CronService('.');
+registry.register(createCronTool(cronService));
+
+// ── Sub-Agent ────────────────────────────────────────
+const agentRegistry = new SubAgentRegistry({ maxSpawnDepth: 1, maxConcurrent: 3 });
+
+function getSpawnCtx(): SpawnContext {
+    return {
+        model,
+        registry,
+        agentRegistry,
+        buildSystem: () => builder.build(makePromptCtx()),
+        currentDepth: 0,
+    };
+}
+
+registry.register(createSpawnTool(agentRegistry, getSpawnCtx));
+
+// ── Prompt Builder ────────────────────────────────────────
 const builder = new PromptBuilder()
     .pipe('coreRules', coreRules())
     .pipe('toolGuide', toolGuide())
@@ -100,7 +152,7 @@ const builder = new PromptBuilder()
     .pipe('skillContext', () => skillLoader.buildPromptSection(activeSkills))
     .pipe('sessionContext', sessionContext());
 
-// ── Channel Gateway ────────────────────────────────
+// ── Channel Gateway ────────────────────────────────────────
 const gateway = new ChannelGateway({
     model,
     registry,
@@ -115,7 +167,7 @@ const feishuChannel = new FeishuChannel({
 });
 gateway.register(feishuChannel);
 
-// ── Commands ────────────────────────────────
+// ── Commands ────────────────────────────────────────
 const dispatch = createDispatcher([
     ...debugCommands,
     ...contextCommands,
@@ -125,6 +177,9 @@ const dispatch = createDispatcher([
     ...createSkillCommands(skillLoader, activeSkills),
     ...createPluginCommands(pluginManager, availablePlugins),
     ...createChannelCommands(gateway),
+    ...createSecurityCommands(registry, hookPipeline),
+    ...createCronCommands(cronService),
+    ...createAgentCommands(agentRegistry),
 ]);
 
 function makePromptCtx(): PromptContext {
@@ -154,6 +209,33 @@ async function main() {
     console.log('  启动 Channel...');
     await gateway.startAll();
 
+    // 启动 Cron
+    cronService.load();
+    cronService.setExecutor({
+        runAgentPrompt: async (prompt, timeout) => {
+            const cronMessages: ModelMessage[] = [{ role: 'user', content: prompt }];
+            const system = builder.build(makePromptCtx());
+            await agentLoop(model, registry, cronMessages, system);
+            const lastMsg = cronMessages[cronMessages.length - 1];
+            if (!lastMsg) return '(无输出)';
+            if (typeof lastMsg.content === 'string') return lastMsg.content;
+            if (Array.isArray(lastMsg.content)) {
+                return (
+                    lastMsg.content
+                        .filter((p: any) => p.type === 'text')
+                        .map((p: any) => p.text)
+                        .join('') || '(无输出)'
+                );
+            }
+            return String(lastMsg.content);
+        },
+        notify: (message) => {
+            console.log(`\n${message}`);
+        },
+    });
+    cronService.start();
+    const cronJobs = cronService.list();
+
     const store = new SessionStore('default');
     let messages: ModelMessage[] = [];
     const timestamps = new Map<number, number>();
@@ -166,6 +248,7 @@ async function main() {
             const trimmed = input.trim();
             if (!trimmed || trimmed === 'exit') {
                 console.log('Bye!');
+                cronService.stop();
                 await gateway.stopAll();
                 await pluginManager.unloadAll();
                 rl.close();
@@ -211,21 +294,25 @@ async function main() {
         });
     }
 
-    console.log('Super Agent v0.16 — Channel (type "exit" to quit)');
-    console.log('快捷命令：');
-    console.log('  /channel         — 查看通道状态');
-    console.log('  /plugin          — 查看插件');
-    console.log('  /skill           — 查看 skills');
-    console.log('  /memory          — 查看记忆');
-    console.log('  /context         — context 占用矩阵');
-    console.log('');
-    console.log(`  Dashboard: http://localhost:${FEISHU_PORT}`);
-    console.log('  打开浏览器发送测试消息，或在终端直接对话');
-    console.log('');
+    const role = registry.getRole();
+    const toolCount = registry.getActiveTools().length;
+    const hooks = hookPipeline.list();
 
-    if (loadedSkills.length > 0) {
-        console.log(`  发现 ${loadedSkills.length} 个 skill`);
-    }
+    console.log('Super Agent v0.19 — Sub-Agent (type "exit" to quit)');
+    console.log('快捷命令：');
+    console.log('  /agents           — 查看子 Agent 记录');
+    console.log('  /cron             — 查看定时任务');
+    console.log('  /role [角色]      — 查看/切换角色');
+    console.log('');
+    console.log(`  当前角色: ${role}，可用工具: ${toolCount} 个`);
+    console.log(
+        `  Sub-Agent: 最大深度 ${agentRegistry.getConfig().maxSpawnDepth}，最大并发 ${agentRegistry.getConfig().maxConcurrent}`,
+    );
+    console.log('');
+    console.log('  试试：');
+    console.log('    帮我对比 Hono、Fastify 和 Express 的性能和生态');
+    console.log('    /agents       — 查看子 Agent 执行记录');
+    console.log('');
 
     if (fs.existsSync('docs')) {
         const files = fs.readdirSync('docs').filter((f) => f.endsWith('.md'));

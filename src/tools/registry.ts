@@ -1,5 +1,9 @@
 import { jsonSchema } from 'ai';
-import type { MCPClient, MockMCPClient } from './mcp-client';
+import type { MCPClient, MockMCPClient } from './mcp-client.js';
+import type { HookPipeline } from '../security/hooks.js';
+import type { Role } from '../security/roles.js';
+import { canUseTool } from '../security/roles.js';
+import { classifyBashCommand } from '../security/bash-classifier.js';
 
 export interface ToolDefinition {
     name: string;
@@ -26,6 +30,8 @@ export class ToolRegistry {
 
     private activeProfile: string = 'full';
     private discoveredTools = new Set<string>();
+    private currentRole: Role = 'owner';
+    private hookPipeline?: HookPipeline;
 
     register(...tools: ToolDefinition[]): void {
         for (const tool of tools) {
@@ -33,7 +39,6 @@ export class ToolRegistry {
         }
     }
 
-    // 在 register 方法后面加上：
     unregister(name: string): boolean {
         this.discoveredTools.delete(name);
         return this.tools.delete(name);
@@ -92,6 +97,18 @@ export class ToolRegistry {
         return this.activeProfile;
     }
 
+    setRole(role: Role): void {
+        this.currentRole = role;
+    }
+
+    getRole(): Role {
+        return this.currentRole;
+    }
+
+    setHookPipeline(pipeline: HookPipeline): void {
+        this.hookPipeline = pipeline;
+    }
+
     markDiscovered(name: string): void {
         this.discoveredTools.add(name);
     }
@@ -110,6 +127,9 @@ export class ToolRegistry {
                 return false;
             }
             if (tool.shouldDefer && !this.discoveredTools.has(tool.name)) {
+                return false;
+            }
+            if (!canUseTool(this.currentRole, tool.name)) {
                 return false;
             }
             return true;
@@ -207,6 +227,28 @@ export class ToolRegistry {
         for (const resolve of waiting) resolve();
     }
 
+    toAISDKFormatUnlocked(excludeTools?: Set<string>): Record<string, any> {
+        const result: Record<string, any> = {};
+        const activeTools = this.getActiveTools().filter(
+            (t) => !excludeTools || !excludeTools.has(t.name),
+        );
+
+        for (const tool of activeTools) {
+            const maxChars = tool.maxResultChars;
+            const executeFn = tool.execute;
+            result[tool.name] = {
+                description: tool.description,
+                inputSchema: jsonSchema(tool.parameters as any),
+                execute: async (input: any) => {
+                    const raw = await executeFn(input);
+                    const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+                    return truncateResult(text, maxChars);
+                },
+            };
+        }
+        return result;
+    }
+
     toAISDKFormat(): Record<string, any> {
         const result: Record<string, any> = {};
         const activeTools = this.getActiveTools();
@@ -217,10 +259,38 @@ export class ToolRegistry {
             const isSafe = tool.isConcurrencySafe === true;
             const registry = this;
 
+            const hookPipeline = registry.hookPipeline;
+            const toolName = tool.name;
+
             result[tool.name] = {
                 description: tool.description,
                 inputSchema: jsonSchema(tool.parameters as any),
                 execute: async (input: any) => {
+                    // Bash 风险检测
+                    if (toolName === 'bash' && input?.command) {
+                        const risk = classifyBashCommand(input.command);
+                        if (risk.level === 'dangerous') {
+                            return `[拒绝执行] 检测到危险操作: ${risk.reason}\n命令: ${input.command}`;
+                        }
+                        if (risk.level === 'moderate') {
+                            console.log(`  [安全] ⚠ ${risk.reason}: ${input.command}`);
+                        }
+                    }
+
+                    // Pre Hook
+                    if (hookPipeline) {
+                        const preResult = await hookPipeline.runPre(toolName, input);
+                        if (preResult.action === 'block') {
+                            return `[Hook 拦截] ${preResult.reason || '操作被阻止'}`;
+                        }
+                        if (
+                            preResult.action === 'modify' &&
+                            preResult.modifiedInput !== undefined
+                        ) {
+                            input = preResult.modifiedInput;
+                        }
+                    }
+
                     if (isSafe) {
                         await registry.acquireConcurrent();
                     } else {
@@ -229,7 +299,17 @@ export class ToolRegistry {
                     try {
                         const raw = await executeFn(input);
                         const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
-                        return truncateResult(text, maxChars);
+                        let output = truncateResult(text, maxChars);
+
+                        // Post Hook
+                        if (hookPipeline) {
+                            const postResult = await hookPipeline.runPost(toolName, input, output);
+                            if (postResult.modifiedOutput !== undefined) {
+                                output = String(postResult.modifiedOutput);
+                            }
+                        }
+
+                        return output;
                     } finally {
                         if (isSafe) {
                             registry.releaseConcurrent();
