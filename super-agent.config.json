@@ -1,0 +1,52 @@
+{
+    "version": "1.0",
+    "model": {
+        "provider": "custom",
+        "name": "${LLM_MODEL}",
+        "baseURL": "${LLM_API_BASE}",
+        "apiKey": "${LLM_API_KEY}"
+    },
+    "plugins": [
+        {
+            "name": "supabase",
+            "enabled": false,
+            "config": {}
+        }
+    ],
+    "channels": {
+        "feishu": {
+            "enabled": true,
+            "appId": "${FEISHU_APP_ID}",
+            "appSecret": "${FEISHU_APP_SECRET}",
+            "port": 3000
+        }
+    },
+    "agents": {
+        "maxSpawnDepth": 1,
+        "maxConcurrent": 3,
+        "defaultTimeout": 60000
+    },
+    "security": {
+        "defaultRole": "developer",
+        "auditLog": true,
+        "bashTimestamp": true
+    },
+    "memory": {
+        "dataDir": "."
+    },
+    "rag": {
+        "enabled": true,
+        "docsDir": "docs",
+        "embeddingKey": "${DASHSCOPE_API_KEY}"
+    },
+    "cron": {
+        "enabled": true,
+        "dataDir": "."
+    },
+    "session": {
+        "id": "default"
+    },
+    "usage": {
+        "trackingFile": ".usage/today.jsonl"
+    }
+}
