@@ -4,9 +4,12 @@
     "description": "",
     "main": "index.js",
     "type": "module",
+    "bin": {
+        "super-agent": "src/index.ts"
+    },
     "scripts": {
-        "dev": "tsx watch src/index.ts",
         "start": "tsx src/index.ts",
+        "init": "tsx src/index.ts init",
         "continue": "tsx src/index.ts --continue"
     },
     "keywords": [],
@@ -25,7 +28,8 @@
         "fast-glob": "^3.3.3",
         "hono": "^4.12.27",
         "sqlite-vec": "^0.1.9",
-        "turndown": "^7.2.4"
+        "turndown": "^7.2.4",
+        "zod": "^3.25.76"
     },
     "devDependencies": {
         "@types/better-sqlite3": "^7.6.13",
