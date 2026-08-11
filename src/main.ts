@@ -305,7 +305,7 @@ export async function startAgent() {
     const toolCount = registry.getActiveTools().length;
     const hooks = hookPipeline.list();
 
-    console.log('Super Agent v1.0 (type "exit" to quit)');
+    console.log('RuneClaw v1.0 (type "exit" to quit)');
     console.log('快捷命令：');
     console.log('  /agents           — 查看子 Agent 记录');
     console.log('  /cron             — 查看定时任务');

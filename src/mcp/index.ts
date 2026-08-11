@@ -7,7 +7,7 @@ const transport = new StdioClientTransport({
     env: { GITHUB_PERSONAL_ACCESS_TOKEN: process.env.GITHUB_PERSONAL_ACCESS_TOKEN! },
 });
 
-const client = new Client({ name: 'super-agent', version: '1.0.0' });
+const client = new Client({ name: 'runeclaw', version: '1.0.0' });
 await client.connect(transport);
 
 const { tools } = await client.listTools();

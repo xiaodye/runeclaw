@@ -43,3 +43,5 @@ debug.log
 /.sessions
 /.usage
 /.memory
+/.superpowers
+/.pnpm-store

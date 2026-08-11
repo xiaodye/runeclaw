@@ -47,7 +47,7 @@ async function selectModelName(rl: Interface): Promise<string> {
 export async function runInit() {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-    console.log('\n  Super Agent 初始化向导\n');
+    console.log('\n  RuneClaw 初始化向导\n');
 
     if (fs.existsSync(CONFIG_FILE)) {
         const overwrite = await askQuestion(rl, `  ${CONFIG_FILE} 已存在，覆盖? (y/N): `);

@@ -1,11 +1,11 @@
 {
-    "name": "super-agent",
+    "name": "runeclaw",
     "version": "1.0.0",
-    "description": "",
+    "description": "Local AI agent runtime for tools, memory, RAG, sub-agents, plugins, cron jobs, and channels.",
     "main": "index.js",
     "type": "module",
     "bin": {
-        "super-agent": "src/index.ts"
+        "runeclaw": "src/index.ts"
     },
     "scripts": {
         "start": "tsx src/index.ts",
