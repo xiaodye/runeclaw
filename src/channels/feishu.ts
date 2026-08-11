@@ -141,7 +141,7 @@ export class FeishuChannel implements ChannelDefinition {
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <title>Super Agent — Channel Dashboard</title>
+  <title>RuneClaw — Channel Dashboard</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, system-ui, sans-serif; background: #0f172a; color: #e2e8f0; padding: 2rem; min-height: 100vh; }
@@ -162,7 +162,7 @@ export class FeishuChannel implements ChannelDefinition {
   </style>
 </head>
 <body>
-  <h1>Super Agent v0.16</h1>
+  <h1>RuneClaw v1.0</h1>
   <p class="subtitle">Channel Dashboard</p>
 
   <div class="card">

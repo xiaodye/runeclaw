@@ -1,6 +1,10 @@
-# Super Agent
+<p align="center">
+  <img src="./assets/runeclaw-logo.svg" alt="RuneClaw logo" width="720" />
+</p>
 
-一个基于 TypeScript 的本地 AI Agent CLI。它把模型调用、文件工具、RAG、记忆、MCP、子 Agent、定时任务、插件和飞书通道放在同一个运行时里，适合做可迭代的个人 Agent 实验。
+# RuneClaw
+
+RuneClaw 是一个基于 TypeScript 的本地 AI Agent CLI。它把模型调用、文件工具、RAG、记忆、MCP、子 Agent、定时任务、插件和飞书通道放在同一个运行时里，适合做可迭代的个人 Agent 实验。
 
 ## 特性
 
@@ -46,12 +50,12 @@ pnpm start
 
 初始化后会生成两个文件：
 
-- `super-agent.config.json`
+- `runeclaw.config.json`
 - `.env`
 
 约定是：
 
-- `super-agent.config.json` 只保留占位符，不放明文密钥
+- `runeclaw.config.json` 只保留占位符，不放明文密钥
 - 真正的模型和飞书密钥放在 `.env`
 
 配置文件里的 `${LLM_MODEL}`、`${LLM_API_BASE}`、`${LLM_API_KEY}`、`${FEISHU_APP_ID}`、`${FEISHU_APP_SECRET}` 会在启动时自动从环境变量替换。
@@ -65,6 +69,8 @@ LLM_API_KEY=your-deepseek-api-key
 
 FEISHU_APP_ID=cli_xxx
 FEISHU_APP_SECRET=xxx
+
+DASHSCOPE_API_KEY=your-dashscope-api-key-for-embeddings
 
 TAVILY_API_KEY=
 # 或者
@@ -148,7 +154,7 @@ src/
 ## 说明
 
 - 启动时会自动导入 `docs/` 下的 `.md` 文档到知识库
-- 当前项目里的飞书配置只应通过 `.env` 提供，不要把 secret 写进 `super-agent.config.json`
+- 当前项目里的飞书配置只应通过 `.env` 提供，不要把 secret 写进 `runeclaw.config.json`
 - Web 搜索工具会优先使用 `TAVILY_API_KEY`，没有时可用 `SERPER_API_KEY`
 
 ## 许可证

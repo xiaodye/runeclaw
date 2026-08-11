@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { SuperAgentConfigSchema, type SuperAgentConfig } from './schema';
 
-export const CONFIG_FILE = 'super-agent.config.json';
+export const CONFIG_FILE = 'runeclaw.config.json';
 
 const ENV_VAR_RE = /\$\{([A-Z_][A-Z0-9_]*)\}/g;
 
