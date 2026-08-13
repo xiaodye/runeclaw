@@ -40,8 +40,8 @@ debug.log
 # LangGraph API
 .langgraph_api
 
-/.sessions
-/.usage
-/.memory
-/.superpowers
 /.pnpm-store
+
+# /.sessions
+# /.usage
+# /.memory
