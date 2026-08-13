@@ -2,18 +2,36 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { MemoryEntry } from './store';
 
+/**
+ * 单个记忆条目的健康检查问题。
+ */
 export interface ValidationIssue {
+    /** 问题类型，用于调用方分类展示或处理。 */
     kind: 'stale_path' | 'never_used' | 'duplicate_name';
+
+    /** 面向用户的中文诊断信息。 */
     message: string;
 }
 
+/**
+ * 单条记忆的完整校验报告，只在存在问题时生成。
+ */
 export interface ValidationReport {
+    /** 被校验的记忆条目。 */
     entry: MemoryEntry;
+
+    /** 该记忆命中的全部健康检查问题。 */
     issues: ValidationIssue[];
 }
 
 const PATH_RE = /(?<![\w/])([\w./-]+\.(?:ts|tsx|js|jsx|json|md|mdx|sql|yml|yaml|toml|env|sh|py))/g;
 
+/**
+ * 从记忆正文中提取看起来像项目文件路径的引用。
+ *
+ * @param content 记忆正文内容。
+ * @returns 去重后的路径引用列表。
+ */
 export function extractPaths(content: string): string[] {
     const paths = new Set<string>();
     for (const match of content.matchAll(PATH_RE)) {
@@ -30,6 +48,13 @@ const TTL_BY_TYPE: Record<string, number> = {
     reference: 14, // 外部资源引用需要频繁刷新
 };
 
+/**
+ * 校验单条记忆是否存在失效路径或长期未读取的问题。
+ *
+ * @param entry 待校验的记忆条目。
+ * @param baseDir 相对路径解析所使用的项目根目录。
+ * @returns 该记忆命中的问题列表。
+ */
 export function validateEntry(entry: MemoryEntry, baseDir = '.'): ValidationIssue[] {
     const issues: ValidationIssue[] = [];
 
@@ -58,6 +83,13 @@ export function validateEntry(entry: MemoryEntry, baseDir = '.'): ValidationIssu
     return issues;
 }
 
+/**
+ * 批量校验记忆库，并额外检测同名记忆。
+ *
+ * @param entries 待校验的记忆条目列表。
+ * @param baseDir 相对路径解析所使用的项目根目录。
+ * @returns 仅包含异常条目的校验报告列表。
+ */
 export function lintAll(entries: MemoryEntry[], baseDir = '.'): ValidationReport[] {
     const reports: ValidationReport[] = [];
 
