@@ -1,5 +1,11 @@
 // --- 错误分类 ---
 
+/**
+ * 判断错误是否适合通过重试恢复，覆盖限流、服务端错误和常见网络中断。
+ *
+ * @param error 待分类的未知错误对象。
+ * @returns 是否应进入重试流程。
+ */
 export function isRetryable(error: unknown): boolean {
     if (!(error instanceof Error)) return false;
 
@@ -26,6 +32,14 @@ export function isRetryable(error: unknown): boolean {
 
 // --- 指数退避 + 随机抖动 ---
 
+/**
+ * 按指数退避计算下一次重试等待时间，并加入随机抖动降低并发重试冲击。
+ *
+ * @param attempt 当前重试序号，从 1 开始。
+ * @param baseMs 初始退避时长，单位为毫秒。
+ * @param maxMs 最大退避上限，单位为毫秒。
+ * @returns 本次重试前应等待的毫秒数。
+ */
 export function calculateDelay(attempt: number, baseMs = 500, maxMs = 30000): number {
     const exponential = baseMs * 2 ** (attempt - 1);
     const capped = Math.min(exponential, maxMs);
@@ -34,6 +48,12 @@ export function calculateDelay(attempt: number, baseMs = 500, maxMs = 30000): nu
     return Math.max(0, Math.round(jittered));
 }
 
+/**
+ * 返回一个在指定时间后 resolve 的 Promise，用于串联异步等待。
+ *
+ * @param ms 等待时长，单位为毫秒。
+ * @returns 等待结束后 resolve 的 Promise。
+ */
 export function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
