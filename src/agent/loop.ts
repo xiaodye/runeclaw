@@ -8,6 +8,15 @@ const MAX_STEPS = 15;
 const MAX_RETRIES = 3;
 const TOKEN_BUDGET = 50000;
 
+/**
+ * 驱动模型按“生成响应、调用工具、记录结果”的节奏循环执行，直到任务完成或触发保护边界。
+ *
+ * @param model AI SDK 兼容的语言模型实例。
+ * @param registry 当前会话可用的工具注册表。
+ * @param messages 会话消息列表，循环过程中会追加模型与工具消息。
+ * @param system 系统提示词，用于约束本轮 Agent 行为。
+ * @param tracker 可选的用量追踪器，用于累计 token 与成本。
+ */
 export async function agentLoop(
     model: any,
     registry: ToolRegistry,

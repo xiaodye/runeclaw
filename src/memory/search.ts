@@ -1,14 +1,21 @@
 import type { MemoryEntry } from './store';
 
+/**
+ * BM25 检索命中的单条结果。
+ */
 export interface SearchHit {
+    /** 命中的记忆条目。 */
     entry: MemoryEntry;
+
+    /** BM25 相关性分数，越高表示越相关。 */
     score: number;
 }
 
 /**
- * 简单的中英文分词：
- * - 英文 / 数字按非字母数字分隔
- * - 中文按字切分（粗暴但够用——记忆条目都很短）
+ * 简单切分中英文查询文本，英文和数字按词聚合，中文按字切分。
+ *
+ * @param text 待分词的原始文本。
+ * @returns 可用于 BM25 统计的 token 列表。
  */
 function tokenize(text: string): string[] {
     const tokens: string[] = [];
@@ -38,10 +45,12 @@ const K1 = 1.5;
 const B = 0.75;
 
 /**
- * BM25 排序——比简单的 includes 关键词搜索准很多：
- * - tf 饱和：一个词出现 10 次和 100 次差距不大
- * - idf：常见词权重低，罕见词权重高
- * - 文档长度归一化：长文档不会因为内容多就一定排前面
+ * 使用 BM25 对记忆条目排序，名称和摘要会被重复拼接以提升权重。
+ *
+ * @param entries 候选记忆条目列表。
+ * @param query 检索关键词或自然语言查询。
+ * @param topK 返回结果数量上限。
+ * @returns 按相关性降序排列的命中结果。
  */
 export function bm25Search(entries: MemoryEntry[], query: string, topK = 5): SearchHit[] {
     if (entries.length === 0 || !query.trim()) return [];
