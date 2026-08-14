@@ -32,8 +32,16 @@ const CLEARABLE_TOOLS = new Set([
 ]);
 const KEEP_RECENT_TOOL_RESULTS = 3;
 
+/**
+ * 清理较早的可丢弃工具结果，降低短期上下文占用。
+ *
+ * @param messages 需要压缩的消息序列。
+ * @returns
+ */
 export function microcompact(messages: ModelMessage[]): {
+    /** 清理后的消息列表。 */
     messages: ModelMessage[];
+    /** 本次被清理的工具结果数量。 */
     cleared: number;
 } {
     let cleared = 0;
@@ -102,11 +110,22 @@ const CONTEXT_TOKEN_THRESHOLD = 300;
 const KEEP_RECENT_MESSAGES = 6;
 
 export interface CompactionResult {
+    /** 压缩后继续传给模型的消息列表。 */
     messages: ModelMessage[];
+    /** LLM 生成的历史摘要文本。 */
     summary: string;
+    /** 本次被摘要替换的原始消息数量。 */
     compressedCount: number;
 }
 
+/**
+ * 在上下文过长时把较早对话摘要成单条消息，并保留最近交互。
+ *
+ * @param model 用于生成摘要的语言模型实例。
+ * @param messages 当前完整消息列表。
+ * @param existingSummary 上一次压缩留下的摘要，用于滚动合并。
+ * @returns
+ */
 export async function summarize(
     model: any,
     messages: ModelMessage[],

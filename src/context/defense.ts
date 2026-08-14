@@ -3,23 +3,52 @@ import type { ModelMessage } from 'ai';
 // ── Layer 1: Token Estimation ────────────────────────
 
 export class TokenTracker {
+    /** 最近一次来自模型 API 的精确 prompt token 计数。 */
     private lastPreciseCount = 0;
+    /** 精确计数之后新增但尚未被 API 校准的字符数。 */
     private pendingChars = 0;
 
+    /**
+     * 用模型 API 返回的精确计数重置本地估算基线。
+     *
+     * @param promptTokens API 报告的 prompt token 数。
+     */
     updateFromAPI(promptTokens: number): void {
         this.lastPreciseCount = promptTokens;
         this.pendingChars = 0;
     }
 
+    /**
+     * 累计新增消息内容，供下一次精确计数前做近似估算。
+     *
+     * @param content 新增消息的文本内容。
+     */
     addMessage(content: string): void {
         this.pendingChars += content.length;
     }
 
+    /**
+     * 返回精确基线加新增字符估算后的 token 数。
+     *
+     * @returns
+     */
     get estimatedTokens(): number {
         return this.lastPreciseCount + Math.ceil(this.pendingChars / 4);
     }
 
-    get status(): { tokens: number; percent: number; needsAction: boolean } {
+    /**
+     * 返回当前上下文窗口占用状态，并提示是否需要触发压缩动作。
+     *
+     * @returns
+     */
+    get status(): {
+        /** 当前估算 token 数。 */
+        tokens: number;
+        /** 相对上下文窗口的占用百分比。 */
+        percent: number;
+        /** 是否达到建议触发压缩的阈值。 */
+        needsAction: boolean;
+    } {
         const tokens = this.estimatedTokens;
         const percent = Math.round((tokens / CONTEXT_WINDOW) * 100);
         return {
@@ -32,6 +61,12 @@ export class TokenTracker {
 
 const CONTEXT_WINDOW = 200_000;
 
+/**
+ * 按消息内容粗略估算 token 数，并对中英文混合内容加安全系数。
+ *
+ * @param messages 待估算的模型消息列表。
+ * @returns
+ */
 export function estimateMessageTokens(messages: ModelMessage[]): number {
     let chars = 0;
     for (const msg of messages) {
@@ -56,7 +91,9 @@ export function estimateMessageTokens(messages: ModelMessage[]): number {
 // ── Layer 2: Dynamic Tool Result Truncation ──────────
 
 interface TruncationConfig {
+    /** 单个工具结果允许保留的最大字符数。 */
     maxSingleResult: number;
+    /** 整体上下文中工具结果可占用的字符预算。 */
     contextBudgetChars: number;
 }
 
@@ -65,10 +102,24 @@ const DEFAULT_TRUNCATION: TruncationConfig = {
     contextBudgetChars: Math.floor(CONTEXT_WINDOW * 0.75 * 4), // 75% of window, 4 chars/token
 };
 
+/**
+ * 截断过大的工具结果，并在总预算超限时清理最早的工具输出。
+ *
+ * @param messages 待处理的消息列表。
+ * @param config 截断阈值与总字符预算。
+ * @returns
+ */
 export function truncateToolResults(
     messages: ModelMessage[],
     config: TruncationConfig = DEFAULT_TRUNCATION,
-): { messages: ModelMessage[]; truncated: number; compacted: number } {
+): {
+    /** 截断或清理后的消息列表。 */
+    messages: ModelMessage[];
+    /** 被单结果截断的输出数量。 */
+    truncated: number;
+    /** 因总预算超限被整体清理的工具消息数量。 */
+    compacted: number;
+} {
     let truncated = 0;
     let compacted = 0;
 
@@ -138,8 +189,11 @@ export function truncateToolResults(
 // ── Layer 3: TTL Pruning ─────────────────────────────
 
 interface TTLConfig {
+    /** 超过该时间后对工具结果做保留头尾的软裁剪。 */
     softTTLMs: number;
+    /** 超过该时间后把工具结果整体替换成占位文本。 */
     hardTTLMs: number;
+    /** 软裁剪时头尾分别保留的字符数。 */
     keepHeadTail: number;
 }
 
@@ -150,11 +204,22 @@ const DEFAULT_TTL: TTLConfig = {
 };
 
 export interface PruneResult {
+    /** TTL 处理后的消息列表。 */
     messages: ModelMessage[];
+    /** 被软裁剪的工具结果数量。 */
     softPruned: number;
+    /** 被硬清理的工具结果数量。 */
     hardPruned: number;
 }
 
+/**
+ * 根据工具结果年龄做 TTL 裁剪，同时保留包含错误信息的结果。
+ *
+ * @param messages 待裁剪的消息列表。
+ * @param timestamps 消息索引到创建时间戳的映射。
+ * @param config TTL 阈值与保留长度配置。
+ * @returns
+ */
 export function ttlPrune(
     messages: ModelMessage[],
     timestamps: Map<number, number>,
@@ -221,14 +286,27 @@ export function ttlPrune(
 // ── Combined Defense ─────────────────────────────────
 
 export interface DefenseResult {
+    /** 防御处理后的消息列表。 */
     messages: ModelMessage[];
+    /** 处理后的最终 token 估算值。 */
     tokenEstimate: number;
+    /** 被单结果截断的输出数量。 */
     truncated: number;
+    /** 因总预算超限被整体清理的工具消息数量。 */
     compacted: number;
+    /** TTL 软裁剪数量。 */
     softPruned: number;
+    /** TTL 硬清理数量。 */
     hardPruned: number;
 }
 
+/**
+ * 组合执行工具结果截断、TTL 裁剪和最终 token 估算。
+ *
+ * @param messages 原始消息列表。
+ * @param timestamps 工具消息索引到创建时间戳的映射。
+ * @returns
+ */
 export function applyDefense(
     messages: ModelMessage[],
     timestamps: Map<number, number>,

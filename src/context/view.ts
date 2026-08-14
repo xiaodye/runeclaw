@@ -8,18 +8,28 @@ import type { ModelMessage } from 'ai';
 import type { UsageTracker } from '../usage/tracker';
 
 export interface ContextSlice {
+    /** 切片显示名称，通常对应系统、工具、记忆等上下文类别。 */
     name: string;
+    /** 该类别估算占用的 token 数。 */
     tokens: number;
+    /** ANSI 256 色编号，用于终端矩阵与图例渲染。 */
     color: number; // ANSI 256 color code
+    /** 图例中展示的类别符号。 */
     icon: string;
 }
 
 export interface ContextSnapshot {
+    /** 面向用户展示的模型名称。 */
     modelName: string;
+    /** 模型的底层标识或 provider id。 */
     modelId: string;
+    /** 当前模型上下文窗口容量。 */
     windowTokens: number;
+    /** 已使用 token 的估算总数。 */
     usedTokens: number;
+    /** 按类别拆分的 token 切片。 */
     slices: ContextSlice[];
+    /** 预留给 autocompact 的缓冲 token 数。 */
     // 预留给 autocompact，用户聊得越深这个越小
     autocompactBufferTokens: number;
 }
@@ -36,15 +46,35 @@ const COLORS = {
     dim: 244, // 暗灰
 };
 
+/**
+ * 给字符串套上 ANSI 前景色控制码。
+ *
+ * @param code ANSI 256 色编号。
+ * @param s 待着色的字符串。
+ * @returns
+ */
 function fg(code: number, s: string): string {
     return `\x1b[38;5;${code}m${s}\x1b[0m`;
 }
 
+/**
+ * 将分子和总量格式化为一位小数百分比。
+ *
+ * @param n 分子数值。
+ * @param total 总量，传 0 时返回 0.0%。
+ * @returns
+ */
 function pct(n: number, total: number): string {
     if (total === 0) return '0.0%';
     return `${((n / total) * 100).toFixed(1)}%`;
 }
 
+/**
+ * 将 token 数压缩为适合终端展示的 k/M 文本。
+ *
+ * @param n token 数。
+ * @returns
+ */
 function fmtTokens(n: number): string {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
     if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
@@ -54,6 +84,9 @@ function fmtTokens(n: number): string {
 /**
  * 画一个 16×16 = 256 格的矩阵，每格代表 window/256 个 tokens。
  * 已用部分按 slices 顺序填彩色 ●，free 用 ○，autocompact buffer 用 ▢。
+ *
+ * @param snapshot 已按类别聚合的上下文快照。
+ * @returns
  */
 export function renderContextMatrix(snapshot: ContextSnapshot): string {
     const { windowTokens, slices, autocompactBufferTokens } = snapshot;
@@ -91,6 +124,12 @@ export function renderContextMatrix(snapshot: ContextSnapshot): string {
     return lines.join('\n');
 }
 
+/**
+ * 渲染上下文快照的文字图例，展示各切片占比和剩余空间。
+ *
+ * @param snapshot 已按类别聚合的上下文快照。
+ * @returns
+ */
 export function renderContextLegend(snapshot: ContextSnapshot): string {
     const { slices, autocompactBufferTokens, windowTokens, usedTokens } = snapshot;
     const lines: string[] = [];
@@ -122,6 +161,9 @@ export function renderContextLegend(snapshot: ContextSnapshot): string {
 
 /**
  * 并排显示矩阵 + 图例。简单按行拼接，矩阵在左、图例在右。
+ *
+ * @param snapshot 已按类别聚合的上下文快照。
+ * @returns
  */
 export function renderContextView(snapshot: ContextSnapshot): string {
     const matrix = renderContextMatrix(snapshot).split('\n');
@@ -139,22 +181,43 @@ export function renderContextView(snapshot: ContextSnapshot): string {
 // ── Snapshot 构造：从消息列表 + 各种已知尺寸算 token 切片 ─────────
 
 export interface BuildSnapshotInput {
+    /** 面向用户展示的模型名称。 */
     modelName: string; // "Mock Model" / "Qwen Plus" 等
+    /** 模型的底层标识或 provider id。 */
     modelId: string;
+    /** 模型上下文窗口容量。 */
     windowTokens: number; // 比如 1_000_000
+    /** 系统 prompt 的字符数。 */
     systemPromptChars: number;
+    /** 工具描述文本的字符数。 */
     toolDescriptionChars: number;
+    /** 记忆内容的字符数。 */
     memoryChars: number;
+    /** 已加载 skill 内容的字符数。 */
     skillsChars: number;
+    /** 当前会话消息，用于估算消息切片。 */
     messages: ModelMessage[];
+    /** 可选的 autocompact 预留 token 数，缺省为窗口 5%。 */
     autocompactBufferTokens?: number;
 }
 
 const CHARS_PER_TOKEN = 3.5;
+/**
+ * 按固定字符/token 比例估算 token 数。
+ *
+ * @param chars 字符数量。
+ * @returns
+ */
 function approxTokensFromChars(chars: number): number {
     return Math.ceil(chars / CHARS_PER_TOKEN);
 }
 
+/**
+ * 统计消息文本和工具调用负载的近似 token 占用。
+ *
+ * @param messages 待估算的模型消息列表。
+ * @returns
+ */
 function approxMessageTokens(messages: ModelMessage[]): number {
     let chars = 0;
     for (const m of messages) {
@@ -177,6 +240,12 @@ function approxMessageTokens(messages: ModelMessage[]): number {
     return approxTokensFromChars(chars);
 }
 
+/**
+ * 根据系统、工具、记忆、skill 和消息尺寸构建上下文视图快照。
+ *
+ * @param input 构建快照所需的各类上下文尺寸。
+ * @returns
+ */
 export function buildContextSnapshot(input: BuildSnapshotInput): ContextSnapshot {
     const slices: ContextSlice[] = [
         {
@@ -224,10 +293,29 @@ export function buildContextSnapshot(input: BuildSnapshotInput): ContextSnapshot
 
 // ── /usage 视图：累计成本 + cache 命中率 ─────────────────────────
 
+/**
+ * 渲染累计 token 用量、cache 命中率和成本摘要。
+ *
+ * @param tracker 已记录模型调用用量的追踪器。
+ * @returns
+ */
 export function renderUsageView(tracker: UsageTracker): string {
     const t = tracker.totals();
     const lines: string[] = [];
+    /**
+     * 给用量视图中的局部文本应用 ANSI 前景色。
+     *
+     * @param n ANSI 256 色编号。
+     * @param s 待着色文本。
+     * @returns
+     */
     const C = (n: number, s: string) => fg(n, s);
+    /**
+     * 给用量视图中的局部文本应用 ANSI 加粗样式。
+     *
+     * @param s 待加粗文本。
+     * @returns
+     */
     const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
 
     const totalCacheable = t.cacheReadTokens + t.cacheWriteTokens + t.inputTokens;

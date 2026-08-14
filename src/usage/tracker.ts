@@ -16,9 +16,13 @@ import { dirname } from 'node:path';
  * 加新模型直接扩这张表就行。
  */
 export interface ModelPricing {
+    /** cache miss 时的输入价格，单位 $ / 1M tokens。 */
     input: number; // $ / 1M input tokens (cache miss)
+    /** 输出 token 价格，单位 $ / 1M tokens。 */
     output: number; // $ / 1M output tokens
+    /** 写入 prompt cache 的价格，单位 $ / 1M tokens。 */
     cacheWrite: number; // $ / 1M tokens written to cache
+    /** 命中 prompt cache 的读取价格，单位 $ / 1M tokens。 */
     cacheRead: number; // $ / 1M tokens read from cache (hit)
 }
 
@@ -43,27 +47,48 @@ export const PRICE_TABLE: Record<string, ModelPricing> = {
 };
 
 export interface StepUsage {
+    /** 本次调用的非 cache 输入 token 数。 */
     inputTokens: number;
+    /** 本次调用的输出 token 数。 */
     outputTokens: number;
+    /** 本次调用命中 cache 的输入 token 数。 */
     cacheReadTokens: number;
+    /** 本次调用写入 cache 的 token 数。 */
     cacheWriteTokens: number;
 }
 
 export interface StepRecord extends StepUsage {
+    /** 记录创建时的 Unix 毫秒时间戳。 */
     ts: number;
+    /** 本次调用使用的模型 id。 */
     model: string;
+    /** 按当前价格表计算出的本次调用成本。 */
     cost: number;
 }
 
 export class UsageTracker {
+    /** 当前进程内累计的调用记录。 */
     private steps: StepRecord[] = [];
+    /** 可选 JSONL 日志路径，设置后每步记录会追加写入。 */
     private logPath?: string;
 
+    /**
+     * 创建用量追踪器，并在需要时初始化日志目录。
+     *
+     * @param logPath 可选 JSONL 日志文件路径。
+     */
     constructor(logPath?: string) {
         this.logPath = logPath;
         if (logPath) mkdirSync(dirname(logPath), { recursive: true });
     }
 
+    /**
+     * 记录一次模型调用用量并计算成本。
+     *
+     * @param model 模型 id，用于查找计费表。
+     * @param usage 规范化后的 token 用量。
+     * @returns
+     */
     record(model: string, usage: StepUsage): StepRecord {
         const cost = computeCost(model, usage);
         const record: StepRecord = { ts: Date.now(), model, cost, ...usage };
@@ -75,6 +100,11 @@ export class UsageTracker {
         return record;
     }
 
+    /**
+     * 汇总当前进程内所有调用的 token、成本和 cache 收益。
+     *
+     * @returns
+     */
     totals() {
         const t = this.steps.reduce(
             (a, s) => ({
@@ -108,11 +138,24 @@ export class UsageTracker {
         };
     }
 
+    /**
+     * 返回最近 n 条调用记录。
+     *
+     * @param n 需要读取的记录数量。
+     * @returns
+     */
     recent(n: number): StepRecord[] {
         return this.steps.slice(-n);
     }
 }
 
+/**
+ * 根据模型价格表计算单次调用成本，未知模型使用 mock-model 价格兜底。
+ *
+ * @param model 模型 id。
+ * @param usage 规范化后的 token 用量。
+ * @returns
+ */
 export function computeCost(model: string, usage: StepUsage): number {
     const p = PRICE_TABLE[model] || PRICE_TABLE['mock-model'];
     return (
@@ -130,6 +173,9 @@ export function computeCost(model: string, usage: StepUsage): number {
  * AI SDK v5 把 cache read 标准化到顶层 `cachedInputTokens`（OpenAI、DashScope 都映射到这里）。
  * cache write 没有 AI SDK 标准字段，Anthropic provider 元数据用 `cacheCreationInputTokens`。
  * 这里把两个来源都兜一遍，以后接新 provider 就在对应位置补一行。
+ *
+ * @param usage AI SDK 或 provider 返回的原始 usage 对象。
+ * @returns
  */
 export function normalizeUsage(usage: any): StepUsage {
     if (!usage) return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };

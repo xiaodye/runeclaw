@@ -1,29 +1,55 @@
 import type { ChannelDefinition, IncomingMessage, OutgoingMessage } from './types.js';
 
 interface FeishuConfig {
+    /** 飞书应用的 App ID，缺失时仅启动本地 Dashboard。 */
     appId: string;
+    /** 飞书应用的 App Secret，用于初始化 SDK 客户端。 */
     appSecret: string;
+    /** 本地 Dashboard 与测试 webhook 监听端口。 */
     port: number;
 }
 
+/**
+ * 通过飞书长连接接收入站消息，并提供本地 Dashboard 便于无配置调试。
+ */
 export class FeishuChannel implements ChannelDefinition {
+    /** 通道注册名，用于网关识别和日志输出。 */
     name = 'feishu';
+    /** 通道说明，会展示在 Dashboard 或通道列表中。 */
     description = '飞书 Bot 消息通道（长连接模式）';
 
+    /** 飞书 SDK 与本地 Dashboard 的运行配置。 */
     private config: FeishuConfig;
+    /** 网关注册的入站消息处理器。 */
     private messageHandler?: (msg: IncomingMessage) => void;
+    /** 本地 Dashboard 的 HTTP server 句柄。 */
     private httpServer?: any;
+    /** 飞书长连接客户端实例。 */
     private wsClient?: any;
+    /** 飞书开放平台 API 客户端实例，用于发送回复。 */
     private larkClient?: any;
 
+    /**
+     * 创建飞书通道实例并保存运行配置。
+     *
+     * @param config 飞书通道配置。
+     */
     constructor(config: FeishuConfig) {
         this.config = config;
     }
 
+    /**
+     * 注册网关侧入站消息处理器。
+     *
+     * @param handler 接收入站消息的回调。
+     */
     onMessage(handler: (msg: IncomingMessage) => void): void {
         this.messageHandler = handler;
     }
 
+    /**
+     * 启动本地 Dashboard，并在飞书配置完整时建立长连接。
+     */
     async start(): Promise<void> {
         // 启动状态面板（不管有没有配飞书都起）
         await this.startDashboard();
@@ -79,10 +105,18 @@ export class FeishuChannel implements ChannelDefinition {
         console.log('    飞书长连接已建立（无需 ngrok）');
     }
 
+    /**
+     * 关闭本地 Dashboard 服务。
+     */
     async stop(): Promise<void> {
         if (this.httpServer) this.httpServer.close();
     }
 
+    /**
+     * 将网关回复发送到飞书会话；未配置飞书时仅记录日志。
+     *
+     * @param message 待发送的出站消息。
+     */
     async send(message: OutgoingMessage): Promise<void> {
         if (!this.larkClient) {
             console.log(`    [feishu] 未配置飞书，跳过发送: ${message.text.slice(0, 50)}`);
@@ -104,6 +138,9 @@ export class FeishuChannel implements ChannelDefinition {
         }
     }
 
+    /**
+     * 启动本地调试 Dashboard，并暴露模拟飞书 webhook 的测试入口。
+     */
     private async startDashboard(): Promise<void> {
         const { Hono } = await import('hono');
         const { serve } = await import('@hono/node-server');

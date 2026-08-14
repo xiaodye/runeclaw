@@ -33,7 +33,7 @@ export const debugCommands: CommandHandler[] = [
                         type: 'tool-result' as const,
                         toolCallId: `sim-${i}`,
                         toolName: 'read_file',
-                        output: bigContent,
+                        output: { type: 'text' as const, value: bigContent },
                     },
                 ],
             });

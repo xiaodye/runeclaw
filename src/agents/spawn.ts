@@ -4,10 +4,15 @@ import type { SubAgentRegistry } from './registry.js';
 import type { SpawnRequest } from './types.js';
 
 export interface SpawnContext {
+    /** 子 Agent 调用时使用的 AI SDK 模型实例。 */
     model: any;
+    /** 提供给子 Agent 的工具注册表。 */
     registry: ToolRegistry;
+    /** 负责运行限制与状态追踪的子 Agent 注册表。 */
     agentRegistry: SubAgentRegistry;
+    /** 构建当前父 Agent 系统提示词的回调。 */
     buildSystem: () => string;
+    /** 发起方当前所在的嵌套深度。 */
     currentDepth: number;
 }
 
@@ -23,11 +28,26 @@ const AGENT_COLORS = [
 ];
 const RESET = '\x1b[0m';
 
+/**
+ * 为子 Agent 生成带颜色的终端日志标签。
+ *
+ * @param index 子 Agent 在本批任务中的索引。
+ * @param runId 本次执行的运行 ID。
+ * @returns
+ */
 function agentTag(index: number, runId: string): string {
     const color = AGENT_COLORS[index % AGENT_COLORS.length];
     return `${color}[Agent-${index + 1}:${runId}]${RESET}`;
 }
 
+/**
+ * 启动单个子 Agent，驱动其工具调用循环并记录最终状态。
+ *
+ * @param request 待执行的子 Agent 请求。
+ * @param ctx 运行所需的模型、工具与注册表上下文。
+ * @param index 子 Agent 在当前批次中的索引，用于日志标识。
+ * @returns 子 Agent 的最终文本结果或失败说明。
+ */
 export async function spawnAgent(
     request: SpawnRequest,
     ctx: SpawnContext,
@@ -143,6 +163,13 @@ export async function spawnAgent(
     }
 }
 
+/**
+ * 在剩余并发额度内批量执行子 Agent 请求，并为超额请求返回拒绝结果。
+ *
+ * @param requests 待并行执行的子 Agent 请求列表。
+ * @param ctx 运行所需的模型、工具与注册表上下文。
+ * @returns 与已处理请求对应的任务及结果列表。
+ */
 export async function spawnParallel(
     requests: SpawnRequest[],
     ctx: SpawnContext,
