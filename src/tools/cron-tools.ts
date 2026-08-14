@@ -43,6 +43,7 @@ export function createCronTool(cronService: CronService): ToolDefinition {
             name?: string;
             schedule?: string;
             prompt?: string;
+            handler?: string;
         }) => {
             switch (input.action) {
                 case 'list': {
