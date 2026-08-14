@@ -1,11 +1,18 @@
 export type RiskLevel = 'safe' | 'moderate' | 'dangerous';
 
 interface ClassifyResult {
+    /** 命令风险等级，用于决定是否允许、提示或拦截。 */
     level: RiskLevel;
+    /** 命中风险规则时的人类可读原因。 */
     reason?: string;
 }
 
-const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+const DANGEROUS_PATTERNS: Array<{
+    /** 用于匹配危险命令形态的正则。 */
+    pattern: RegExp;
+    /** 命中该规则时返回的风险原因。 */
+    reason: string;
+}> = [
     { pattern: /\brm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+|.*-rf\b|.*--force)/, reason: '强制删除文件' },
     { pattern: /\brm\s+-[a-zA-Z]*r/, reason: '递归删除' },
     { pattern: /\bsudo\b/, reason: '提权操作' },
@@ -20,7 +27,12 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
     { pattern: />\s*\/etc\//, reason: '覆写系统配置' },
 ];
 
-const MODERATE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+const MODERATE_PATTERNS: Array<{
+    /** 用于匹配中等风险命令形态的正则。 */
+    pattern: RegExp;
+    /** 命中该规则时返回的风险原因。 */
+    reason: string;
+}> = [
     { pattern: /\brm\b/, reason: '删除文件' },
     { pattern: /\bmv\b/, reason: '移动/重命名文件' },
     { pattern: /\bchmod\b/, reason: '修改权限' },
@@ -33,6 +45,12 @@ const MODERATE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
     { pattern: /\bdocker\s+rm\b/, reason: '删除容器' },
 ];
 
+/**
+ * 根据静态规则识别 bash 命令的危险程度。
+ *
+ * @param command 待分类的原始命令字符串。
+ * @returns
+ */
 export function classifyBashCommand(command: string): ClassifyResult {
     for (const { pattern, reason } of DANGEROUS_PATTERNS) {
         if (pattern.test(command)) {

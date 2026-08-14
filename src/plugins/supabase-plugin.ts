@@ -1,5 +1,8 @@
 import type { PluginDefinition, PluginApi } from './types';
 
+/**
+ * 提供 Supabase 查询、插入和表列表工具的示例插件。
+ */
 export const supabasePlugin: PluginDefinition = {
     name: 'supabase',
     version: '1.0.0',
@@ -9,6 +12,11 @@ export const supabasePlugin: PluginDefinition = {
         supabaseKey: '${SUPABASE_KEY}',
     },
 
+    /**
+     * 激活插件并根据配置注册 Supabase 工具，缺少配置时进入 Mock 模式。
+     *
+     * @param api 插件运行时提供的注册、配置和日志接口。
+     */
     activate(api: PluginApi) {
         const config = api.getConfig();
         const url = config.supabaseUrl as string;
@@ -25,6 +33,11 @@ export const supabasePlugin: PluginDefinition = {
                 parameters: { type: 'object', properties: {}, required: [] },
                 isConcurrencySafe: true,
                 isReadOnly: true,
+                /**
+                 * 列出可访问的数据表；Mock 模式返回示例表名。
+                 *
+                 * @returns
+                 */
                 execute: async () => {
                     if (!url) {
                         return JSON.stringify({
@@ -50,10 +63,20 @@ export const supabasePlugin: PluginDefinition = {
                 },
                 isConcurrencySafe: true,
                 isReadOnly: true,
+                /**
+                 * 查询指定表数据；Mock 模式在内置示例数据上做简单过滤。
+                 *
+                 * @param input 查询参数，必须包含表名。
+                 * @returns
+                 */
                 execute: async (input: {
+                    /** 需要查询的表名。 */
                     table: string;
+                    /** 查询字段表达式，缺省为 `*`。 */
                     select?: string;
+                    /** 简单等值过滤条件，格式为 `field=value`。 */
                     where?: string;
+                    /** 返回行数上限，缺省为 10。 */
                     limit?: number;
                 }) => {
                     const { table, select = '*', where, limit = 10 } = input;
@@ -106,7 +129,18 @@ export const supabasePlugin: PluginDefinition = {
                 },
                 isConcurrencySafe: false,
                 isReadOnly: false,
-                execute: async (input: { table: string; data: Record<string, unknown> }) => {
+                /**
+                 * 向指定表插入一条记录；Mock 模式返回模拟插入结果。
+                 *
+                 * @param input 插入参数，包含表名和记录数据。
+                 * @returns
+                 */
+                execute: async (input: {
+                    /** 需要插入的表名。 */
+                    table: string;
+                    /** 要插入的一条记录数据。 */
+                    data: Record<string, unknown>;
+                }) => {
                     const { table, data } = input;
                     if (!url) {
                         return JSON.stringify({
@@ -124,6 +158,9 @@ export const supabasePlugin: PluginDefinition = {
         api.log(`已注册 3 个工具（list_tables / query / insert）`);
     },
 
+    /**
+     * 释放插件占用的外部连接或资源。
+     */
     destroy() {
         console.log('  [plugin:supabase] 连接已释放');
     },
