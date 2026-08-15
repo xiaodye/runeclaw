@@ -1,8 +1,8 @@
 name: Codex PR Review
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  # 暂停自动审查；恢复时改回 pull_request 触发器。
+  workflow_dispatch:
 
 concurrency:
   group: codex-pr-review-${{ github.event.pull_request.number }}
