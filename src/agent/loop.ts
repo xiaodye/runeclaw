@@ -6,7 +6,7 @@ import { type UsageTracker, normalizeUsage } from '../usage/tracker';
 
 const MAX_STEPS = 15;
 const MAX_RETRIES = 3;
-const TOKEN_BUDGET = 50000;
+const TOKEN_BUDGET = 150_000;
 
 /**
  * 驱动模型按“生成响应、调用工具、记录结果”的节奏循环执行，直到任务完成或触发保护边界。
