@@ -131,6 +131,18 @@ SERPER_API_KEY=
 - `defend` 或 `执行防线` 应用上下文防线
 - `/cache on`、`/cache off` 切换 cache 模拟
 
+## Codex PR 审查机器人
+
+仓库通过 `openai/codex-action` 自动审查同仓库分支提交的非草稿 PR。机器人会在 PR 创建、重新打开、转为可审查状态或推送新提交时运行，并持续更新同一条中文审查评论。
+
+启用前，在 GitHub 仓库的 **Settings → Secrets and variables → Actions** 中新增 Repository secret：
+
+```text
+OPENAI_API_KEY=your-openai-api-key
+```
+
+出于安全考虑，workflow 不处理来自 fork 的 PR，也不会向 Codex 授予仓库写权限。配置见 `.github/workflows/codex-pr-review.yml`。
+
 ## 项目结构
 
 ```text
