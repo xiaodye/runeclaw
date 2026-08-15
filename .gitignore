@@ -42,6 +42,6 @@ debug.log
 
 /.pnpm-store
 
-# /.sessions
-# /.usage
-# /.memory
+/.sessions
+/.usage
+/.memory
