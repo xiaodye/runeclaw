@@ -1,18 +1,19 @@
 import Database from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
-import type { Chunk } from './chunker';
-import type { StoredChunk } from './store';
+import type { Chunk } from './chunker.js';
+import type { StoredChunk } from './store.js';
+import { embed, EmbeddingFn } from './embedder.js';
+import { mmrSelect, type SearchResult } from './search.js';
 
-/**
- * 基于 SQLite、sqlite-vec 与 FTS 的持久化向量存储。
- */
+/** 使用 SQLite、sqlite-vec 与 FTS5 持久化知识片段并提供混合检索。 */
 export class SqliteVectorStore {
+    /** 承载片段元数据、向量索引与全文索引的数据库连接。 */
     private db: Database.Database;
 
     /**
-     * 打开或创建知识库数据库，并初始化向量与全文检索表。
+     * 打开知识库数据库并初始化检索所需的数据表与扩展。
      *
-     * @param dbPath SQLite 数据库文件路径，默认使用当前目录下的 knowledge.db。
+     * @param dbPath SQLite 数据库文件路径；默认写入当前工作目录。
      */
     constructor(dbPath: string = 'knowledge.db') {
         this.db = new Database(dbPath);
@@ -20,9 +21,7 @@ export class SqliteVectorStore {
         this.createTables();
     }
 
-    /**
-     * 创建 chunk 元数据、向量索引和 FTS 索引三类表结构。
-     */
+    /** 创建片段表、向量索引和全文索引，已存在时保持原结构。 */
     private createTables() {
         this.db.exec(`
       CREATE TABLE IF NOT EXISTS chunks (
@@ -47,10 +46,10 @@ export class SqliteVectorStore {
     }
 
     /**
-     * 将 chunk 同步写入元数据表、向量表和全文索引表。
+     * 将单个知识片段同步写入元数据表、向量索引和全文索引。
      *
-     * @param chunk 待持久化的知识片段元数据。
-     * @param embedding 与 chunk 文本对应的向量表示。
+     * @param chunk 待持久化的知识片段。
+     * @param embedding 与片段正文对应的向量表示。
      */
     add(chunk: Chunk, embedding: number[]): void {
         const now = Date.now();
@@ -79,11 +78,18 @@ export class SqliteVectorStore {
     }
 
     /**
-     * 在单个事务中批量写入 chunk，减少 SQLite 提交开销。
+     * 在同一事务中批量写入知识片段与对应向量。
      *
-     * @param items 待写入的 chunk 与 embedding 配对列表。
+     * @param items 待写入的片段与向量配对列表。
      */
-    addBatch(items: Array<{ chunk: Chunk; embedding: number[] }>): void {
+    addBatch(
+        items: Array<{
+            /** 待持久化的知识片段。 */
+            chunk: Chunk;
+            /** 与片段正文对应的向量表示。 */
+            embedding: number[];
+        }>,
+    ): void {
         const tx = this.db.transaction(() => {
             for (const { chunk, embedding } of items) this.add(chunk, embedding);
         });
@@ -91,16 +97,21 @@ export class SqliteVectorStore {
     }
 
     /**
-     * 使用 sqlite-vec 按 query embedding 检索最相近的 chunk。
+     * 使用 sqlite-vec 的 KNN 约束检索最相近的 chunk。
      *
-     * @param queryEmbedding 查询文本对应的向量表示。
-     * @param topK 需要返回的相近结果数量上限。
-     * @returns
+     * @param queryEmbedding 查询文本对应的向量。
+     * @param topK 返回结果数量上限。
+     * @returns 按向量距离升序排列的 chunk 及相似度。
      */
     vectorSearch(
         queryEmbedding: number[],
         topK: number,
-    ): Array<{ chunk: StoredChunk; score: number }> {
+    ): Array<{
+        /** 命中的知识片段及其向量信息。 */
+        chunk: StoredChunk;
+        /** 由向量距离转换得到的相似度分数。 */
+        score: number;
+    }> {
         const buf = Buffer.from(new Float32Array(queryEmbedding).buffer);
         const rows = this.db
             .prepare(
@@ -108,9 +119,8 @@ export class SqliteVectorStore {
       SELECT v.id, v.distance, c.text, c.source, c.chunk_index, c.embedding
       FROM chunks_vec v
       JOIN chunks c ON c.id = v.id
-      WHERE v.embedding MATCH ?
+      WHERE v.embedding MATCH ? AND k = ?
       ORDER BY v.distance
-      LIMIT ?
     `,
             )
             .all(buf, topK) as any[];
@@ -130,13 +140,24 @@ export class SqliteVectorStore {
     }
 
     /**
-     * 使用 FTS5 对 chunk 文本执行关键词检索，并转换 bm25 rank 为相似度分。
+     * 使用经过清洗的 FTS5 查询执行关键词检索，避免用户输入破坏查询语法。
      *
-     * @param query FTS5 查询表达式或关键词。
-     * @param topK 需要返回的关键词结果数量上限。
-     * @returns
+     * @param query 用户输入的自然语言查询。
+     * @param topK 返回结果数量上限。
+     * @returns 按关键词相关性排序的 chunk 及分数。
      */
-    keywordSearch(query: string, topK: number): Array<{ chunk: StoredChunk; score: number }> {
+    keywordSearch(
+        query: string,
+        topK: number,
+    ): Array<{
+        /** 命中的知识片段及其向量信息。 */
+        chunk: StoredChunk;
+        /** 由 FTS5 BM25 rank 转换得到的相关性分数。 */
+        score: number;
+    }> {
+        const ftsQuery = sanitizeFtsQuery(query);
+        if (!ftsQuery) return [];
+
         const rows = this.db
             .prepare(
                 `
@@ -148,7 +169,7 @@ export class SqliteVectorStore {
       LIMIT ?
     `,
             )
-            .all(query, topK) as any[];
+            .all(ftsQuery, topK) as any[];
 
         return rows.map((r) => ({
             chunk: {
@@ -165,22 +186,112 @@ export class SqliteVectorStore {
     }
 
     /**
-     * 返回持久化知识库中的 chunk 总数。
+     * 统计当前持久化的知识片段数量。
      *
-     * @returns
+     * @returns 元数据表中的片段总数。
      */
     size(): number {
         return (this.db.prepare('SELECT COUNT(*) as n FROM chunks').get() as any).n;
     }
 
+    /** 清空元数据表、向量索引与全文索引中的全部知识片段。 */
+    clear(): void {
+        this.db.exec('DELETE FROM chunks; DELETE FROM chunks_vec; DELETE FROM chunks_fts;');
+    }
+
     /**
-     * 查询当前知识库中所有去重后的文档来源。
+     * 汇总当前知识库中的去重来源标识。
      *
-     * @returns
+     * @returns 数据库中出现过的 source 列表。
      */
     sources(): string[] {
         return (this.db.prepare('SELECT DISTINCT source FROM chunks').all() as any[]).map(
             (r) => r.source,
         );
     }
+
+    /**
+     * 在 SQLite 层合并向量 KNN 与 FTS5 关键词检索结果。
+     *
+     * @param embedFn 用于生成查询向量的 embedding 函数。
+     * @param query 用户输入的自然语言查询。
+     * @param topK 返回结果数量上限。
+     * @returns 按综合分数和 MMR 去重后的搜索结果。
+     */
+    async hybridSearch(
+        embedFn: EmbeddingFn,
+        query: string,
+        topK: number = 5,
+    ): Promise<SearchResult[]> {
+        const candidateCount = Math.min(topK * 4, this.size());
+        if (candidateCount === 0) return [];
+
+        const [queryVec] = await embed(embedFn, [query]);
+
+        // 路径 1: sqlite-vec 向量搜索
+        const vectorResults = this.vectorSearch(queryVec, candidateCount);
+
+        // 路径 2: FTS5 关键词搜索
+        const keywordResults = this.keywordSearch(query, candidateCount);
+
+        // 归一化 + 加权合并
+        const vecScores = normalizeMinMax(vectorResults.map((r) => r.score));
+        const kwScores = normalizeMinMax(keywordResults.map((r) => r.score));
+
+        const candidates = new Map<string, SearchResult>();
+        for (let i = 0; i < vectorResults.length; i++) {
+            const id = vectorResults[i].chunk.id;
+            candidates.set(id, {
+                chunk: vectorResults[i].chunk,
+                score: vecScores[i] * 0.7,
+                vectorScore: vecScores[i],
+                keywordScore: 0,
+            });
+        }
+        for (let i = 0; i < keywordResults.length; i++) {
+            const id = keywordResults[i].chunk.id;
+            const existing = candidates.get(id);
+            if (existing) {
+                existing.keywordScore = kwScores[i];
+                existing.score += kwScores[i] * 0.3;
+            } else {
+                candidates.set(id, {
+                    chunk: keywordResults[i].chunk,
+                    score: kwScores[i] * 0.3,
+                    vectorScore: 0,
+                    keywordScore: kwScores[i],
+                });
+            }
+        }
+
+        const sorted = [...candidates.values()].sort((a, b) => b.score - a.score);
+
+        // MMR deduplication
+        return mmrSelect(sorted, topK);
+    }
+}
+
+/**
+ * 将自然语言查询转换为仅包含字面词的安全 FTS5 表达式。
+ *
+ * @param query 原始自然语言查询。
+ * @returns 转义后的 FTS5 查询；没有有效词时返回空字符串。
+ */
+function sanitizeFtsQuery(query: string): string {
+    const terms = query.match(/[\p{L}\p{N}_]+/gu) ?? [];
+    return terms.map((term) => `"${term.replaceAll('"', '""')}"`).join(' OR ');
+}
+
+/**
+ * 使用 min-max 将一组候选分数缩放到零至一的区间。
+ *
+ * @param scores 待归一化的原始分数。
+ * @returns 与输入顺序一致的归一化分数。
+ */
+function normalizeMinMax(scores: number[]): number[] {
+    if (scores.length === 0) return [];
+    const min = Math.min(...scores);
+    const max = Math.max(...scores);
+    const range = max - min || 1;
+    return scores.map((s) => (s - min) / range);
 }

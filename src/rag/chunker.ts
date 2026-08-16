@@ -1,3 +1,4 @@
+/** 表示从原始知识文档中切分出的可检索文本片段。 */
 export interface Chunk {
     /** chunk 的稳定标识，通常由 source 与序号组合生成。 */
     id: string;

@@ -1,4 +1,5 @@
 import type { MemoryStore } from '../memory/store';
+import type { SqliteVectorStore } from '../rag/sqlite-store';
 import type { VectorStore } from '../rag/store';
 import type { PromptContext } from './prompt-builder';
 
@@ -18,7 +19,9 @@ export function memoryContext(memoryStore: MemoryStore): (ctx: PromptContext) =>
  * @param vectorStore 提供文档数量和来源信息的向量存储。
  * @returns
  */
-export function ragContext(vectorStore: VectorStore): (ctx: PromptContext) => string | null {
+export function ragContext(
+    vectorStore: SqliteVectorStore | VectorStore,
+): (ctx: PromptContext) => string | null {
     return () => {
         const size = vectorStore.size();
         if (size === 0) return null;
