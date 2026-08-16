@@ -82,7 +82,10 @@ memoryStore.init();
 registry.register(createMemoryTool(memoryStore));
 
 // ── RAG ────────────────────────────────────────
-const vectorStore = new VectorStore();
+// const vectorStore = new VectorStore();
+
+// sqlite 数据库
+const vectorStore = new SqliteVectorStore('knowledge.db');
 const embedFn = config.rag.embeddingKey
     ? createDashScopeEmbedder(config.rag.embeddingKey)
     : createMockEmbedder();
@@ -199,6 +202,7 @@ function makePromptCtx(): PromptContext {
 }
 
 export async function startAgent() {
+    // MCP 加载
     await connectMCP();
 
     // 加载插件

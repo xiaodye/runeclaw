@@ -38,6 +38,7 @@
         "@types/turndown": "^5.0.6",
         "ajv": "^8.20.0",
         "json-schema-typed": "^8.0.2",
+        "prettier": "^3.9.6",
         "tsx": "^4.22.4",
         "typescript": "^6.0.3"
     }

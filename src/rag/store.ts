@@ -1,5 +1,6 @@
 import type { Chunk } from './chunker';
 
+/** 表示已写入向量存储、可直接参与相似度检索的知识片段。 */
 export interface StoredChunk extends Chunk {
     /** 当前 chunk 的向量表示，用于相似度检索与排序。 */
     embedding: number[];
@@ -12,6 +13,7 @@ export interface StoredChunk extends Chunk {
  * 提供进程内的轻量向量存储，适合临时知识库或测试场景。
  */
 export class VectorStore {
+    /** 当前进程内保存的全部知识片段及其向量。 */
     private chunks: StoredChunk[] = [];
 
     /**
@@ -34,7 +36,14 @@ export class VectorStore {
      *
      * @param items 待写入的 chunk 与 embedding 配对列表。
      */
-    addBatch(items: Array<{ chunk: Chunk; embedding: number[] }>): void {
+    addBatch(
+        items: Array<{
+            /** 待写入的知识片段。 */
+            chunk: Chunk;
+            /** 与片段正文对应的向量表示。 */
+            embedding: number[];
+        }>,
+    ): void {
         for (const { chunk, embedding } of items) {
             this.add(chunk, embedding);
         }

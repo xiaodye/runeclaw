@@ -2,10 +2,19 @@ import fs from 'node:fs';
 import type { ToolDefinition } from './registry';
 import { chunkDocument } from '../rag/chunker';
 import { embed, type EmbeddingFn } from '../rag/embedder';
-import { VectorStore } from '../rag/store';
-import { hybridSearch } from '../rag/search';
+import { SqliteVectorStore } from '../rag/sqlite-store.js';
 
-export function createRagTools(vectorStore: VectorStore, embedFn: EmbeddingFn): ToolDefinition[] {
+/**
+ * 创建文档导入与知识库搜索工具。
+ *
+ * @param vectorStore 持久化知识库的 SQLite 存储。
+ * @param embedFn 用于生成文档和查询向量的 embedding 函数。
+ * @returns 文档导入与知识库搜索工具定义。
+ */
+export function createRagTools(
+    vectorStore: SqliteVectorStore,
+    embedFn: EmbeddingFn,
+): ToolDefinition[] {
     const ragIngestTool: ToolDefinition = {
         name: 'rag_ingest',
         description: '将文档导入知识库。path 为文件路径，内容会被分块、向量化后存储。',
@@ -50,15 +59,22 @@ export function createRagTools(vectorStore: VectorStore, embedFn: EmbeddingFn): 
         isConcurrencySafe: true,
         isReadOnly: true,
         execute: async ({ query, top_k }: { query: string; top_k?: number }) => {
-            if (vectorStore.size() === 0) return '知识库为空，请先使用 rag_ingest 导入文档。';
-            const results = await hybridSearch(vectorStore, embedFn, query, top_k || 5);
-            if (results.length === 0) return `没有找到与 "${query}" 相关的内容。`;
-            return results
-                .map(
-                    (r, i) =>
-                        `[${i + 1}] 来源: ${r.chunk.source} | 综合分: ${r.score.toFixed(3)} (向量: ${r.vectorScore.toFixed(2)}, 关键词: ${r.keywordScore.toFixed(2)})\n${r.chunk.text.slice(0, 500)}`,
-                )
-                .join('\n\n---\n\n');
+            try {
+                if (vectorStore.size() === 0) return '知识库为空，请先使用 rag_ingest 导入文档。';
+
+                const results = await vectorStore.hybridSearch(embedFn, query, top_k || 5);
+
+                if (results.length === 0) return `没有找到与 "${query}" 相关的内容。`;
+                return results
+                    .map(
+                        (r, i) =>
+                            `[${i + 1}] 来源: ${r.chunk.source} | 综合分: ${r.score.toFixed(3)} (向量: ${r.vectorScore.toFixed(2)}, 关键词: ${r.keywordScore.toFixed(2)})\n${r.chunk.text.slice(0, 500)}`,
+                    )
+                    .join('\n\n---\n\n');
+            } catch (e: unknown) {
+                const message = e instanceof Error ? e.message : String(e);
+                return `搜索失败: ${message}`;
+            }
         },
     };
 

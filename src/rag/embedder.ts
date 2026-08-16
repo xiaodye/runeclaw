@@ -56,7 +56,12 @@ const embedCache = new Map<string, number[]>();
  */
 export async function embed(fn: EmbeddingFn, texts: string[]): Promise<number[][]> {
     const results: number[][] = new Array(texts.length);
-    const uncached: { idx: number; text: string }[] = [];
+    const uncached: Array<{
+        /** 文本在原始输入列表中的位置，用于恢复结果顺序。 */
+        idx: number;
+        /** 尚未生成或命中缓存的文本内容。 */
+        text: string;
+    }> = [];
 
     for (let i = 0; i < texts.length; i++) {
         const cached = embedCache.get(texts[i]);
