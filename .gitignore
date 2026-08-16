@@ -44,4 +44,4 @@ debug.log
 
 /.sessions
 /.usage
-/.memory
+# /.memory
