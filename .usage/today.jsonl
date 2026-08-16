@@ -44,3 +44,5 @@
 {"ts":1786728869935,"model":"deepseek-v4-flash","cost":0.003125,"inputTokens":1698,"outputTokens":119,"cacheReadTokens":8320,"cacheWriteTokens":0}
 {"ts":1786728871384,"model":"deepseek-v4-flash","cost":0.0030662,"inputTokens":1440,"outputTokens":123,"cacheReadTokens":10112,"cacheWriteTokens":0}
 {"ts":1786728872514,"model":"deepseek-v4-flash","cost":0.0019898,"inputTokens":540,"outputTokens":57,"cacheReadTokens":11648,"cacheWriteTokens":0}
+{"ts":1786878518065,"model":"deepseek-v4-flash","cost":0.001105,"inputTokens":59,"outputTokens":158,"cacheReadTokens":2560,"cacheWriteTokens":0}
+{"ts":1786878519060,"model":"deepseek-v4-flash","cost":0.00044980000000000004,"inputTokens":111,"outputTokens":14,"cacheReadTokens":2688,"cacheWriteTokens":0}
