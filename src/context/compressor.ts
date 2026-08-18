@@ -1,6 +1,12 @@
 import { generateText, type ModelMessage } from 'ai';
+import { textToolResultOutput, toolResultOutputToText } from './tool-result-output.js';
 
-/** Estimate token count: ~4 chars per token for mixed Chinese/English. */
+/**
+ * 按中英文混合文本的经验比例估算消息 token 数。
+ *
+ * @param messages 待估算的模型消息列表。
+ * @returns 估算得到的 token 数，向上取整。
+ */
 function estimateTokens(messages: ModelMessage[]): number {
     let chars = 0;
     for (const msg of messages) {
@@ -11,7 +17,7 @@ function estimateTokens(messages: ModelMessage[]): number {
                 if ('text' in part && typeof part.text === 'string') {
                     chars += part.text.length;
                 } else if ('output' in part) {
-                    chars += JSON.stringify(part.output).length;
+                    chars += toolResultOutputToText(part.output).length;
                 }
             }
         }
@@ -33,15 +39,13 @@ const CLEARABLE_TOOLS = new Set([
 const KEEP_RECENT_TOOL_RESULTS = 3;
 
 /**
- * 清理较早的可丢弃工具结果，降低短期上下文占用。
+ * 清理较早且可安全丢弃的工具结果，保留最近几次结果以维持上下文连续性。
  *
- * @param messages 需要压缩的消息序列。
- * @returns
+ * @param messages 当前会话消息列表。
+ * @returns 清理后的消息列表及被清理的结果数量。
  */
 export function microcompact(messages: ModelMessage[]): {
-    /** 清理后的消息列表。 */
     messages: ModelMessage[];
-    /** 本次被清理的工具结果数量。 */
     cleared: number;
 } {
     let cleared = 0;
@@ -71,7 +75,7 @@ export function microcompact(messages: ModelMessage[]): {
             ...msg,
             content: msg.content.map((part: any) => ({
                 ...part,
-                output: '[tool result cleared]',
+                output: textToolResultOutput('[tool result cleared]'),
             })),
         };
     });
@@ -110,21 +114,21 @@ const CONTEXT_TOKEN_THRESHOLD = 300;
 const KEEP_RECENT_MESSAGES = 6;
 
 export interface CompactionResult {
-    /** 压缩后继续传给模型的消息列表。 */
+    /** 压缩后继续交给模型使用的消息列表。 */
     messages: ModelMessage[];
-    /** LLM 生成的历史摘要文本。 */
+    /** 对被移出历史的内容生成的结构化摘要。 */
     summary: string;
-    /** 本次被摘要替换的原始消息数量。 */
+    /** 本次压缩移除的原始消息数量。 */
     compressedCount: number;
 }
 
 /**
- * 在上下文过长时把较早对话摘要成单条消息，并保留最近交互。
+ * 在上下文超过阈值时调用模型摘要旧消息，并保留最近对话继续执行。
  *
- * @param model 用于生成摘要的语言模型实例。
- * @param messages 当前完整消息列表。
- * @param existingSummary 上一次压缩留下的摘要，用于滚动合并。
- * @returns
+ * @param model 用于生成摘要的 AI SDK 模型实例。
+ * @param messages 当前完整会话消息列表。
+ * @param existingSummary 上一次压缩产生的摘要，可选。
+ * @returns 压缩后的消息、最新摘要和压缩数量。
  */
 export async function summarize(
     model: any,
@@ -157,7 +161,13 @@ export async function summarize(
                     ? msg.content
                     : Array.isArray(msg.content)
                       ? msg.content
-                            .map((p: any) => p.text || JSON.stringify(p.output || ''))
+                            .map((part) =>
+                                'text' in part
+                                    ? part.text
+                                    : 'output' in part
+                                      ? toolResultOutputToText(part.output)
+                                      : '',
+                            )
                             .join('')
                       : '';
             return content ? `**${msg.role}**: ${content}` : '';

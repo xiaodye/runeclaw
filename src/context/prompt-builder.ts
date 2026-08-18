@@ -12,6 +12,7 @@ export interface PromptContext {
 /** 根据 prompt 构建上下文生成一个可选片段。 */
 type PipeFn = (ctx: PromptContext) => string | null;
 
+/** 按顺序组合多个可动态启用的 system prompt 片段。 */
 export class PromptBuilder {
     /** 按注册顺序执行的 prompt 片段生成管道。 */
     private pipes: Array<{
