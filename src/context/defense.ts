@@ -1,17 +1,19 @@
 import type { ModelMessage } from 'ai';
+import { textToolResultOutput, toolResultOutputToText } from './tool-result-output.js';
 
 // ── Layer 1: Token Estimation ────────────────────────
 
+/** 结合 API 精确基准和消息增量估算上下文 token 使用量。 */
 export class TokenTracker {
-    /** 最近一次来自模型 API 的精确 prompt token 计数。 */
+    /** 最近一次由模型 API 返回的精确 prompt token 数。 */
     private lastPreciseCount = 0;
-    /** 精确计数之后新增但尚未被 API 校准的字符数。 */
+    /** 自上次精确统计后新增消息的字符数。 */
     private pendingChars = 0;
 
     /**
-     * 用模型 API 返回的精确计数重置本地估算基线。
+     * 更新 token 估算的 API 基准，并清空待累加字符数。
      *
-     * @param promptTokens API 报告的 prompt token 数。
+     * @param promptTokens API 返回的 prompt token 数。
      */
     updateFromAPI(promptTokens: number): void {
         this.lastPreciseCount = promptTokens;
@@ -19,36 +21,42 @@ export class TokenTracker {
     }
 
     /**
-     * 累计新增消息内容，供下一次精确计数前做近似估算。
+     * 将一条新消息的字符量加入待估算增量。
      *
-     * @param content 新增消息的文本内容。
+     * @param message 待计入的模型消息。
      */
-    addMessage(content: string): void {
-        this.pendingChars += content.length;
+    addMessage(message: ModelMessage): void {
+        this.pendingChars += countMessageChars(message);
     }
 
     /**
-     * 返回精确基线加新增字符估算后的 token 数。
+     * 批量将消息加入待估算增量。
      *
-     * @returns
+     * @param messages 待计入的模型消息列表。
      */
+    addMessages(messages: ModelMessage[]): void {
+        for (const message of messages) {
+            this.addMessage(message);
+        }
+    }
+
+    /**
+     * 根据消息替换前后的字符差更新待估算增量。
+     *
+     * @param before 替换前的消息列表。
+     * @param after 替换后的消息列表。
+     */
+    replaceMessages(before: ModelMessage[], after: ModelMessage[]): void {
+        this.pendingChars += countMessagesChars(after) - countMessagesChars(before);
+    }
+
+    /** 当前基于精确基准和新增字符量估算的 token 数。 */
     get estimatedTokens(): number {
-        return this.lastPreciseCount + Math.ceil(this.pendingChars / 4);
+        return Math.max(0, this.lastPreciseCount + Math.ceil(this.pendingChars / 4));
     }
 
-    /**
-     * 返回当前上下文窗口占用状态，并提示是否需要触发压缩动作。
-     *
-     * @returns
-     */
-    get status(): {
-        /** 当前估算 token 数。 */
-        tokens: number;
-        /** 相对上下文窗口的占用百分比。 */
-        percent: number;
-        /** 是否达到建议触发压缩的阈值。 */
-        needsAction: boolean;
-    } {
+    /** 当前 token 使用量、占比及是否需要采取压缩措施。 */
+    get status(): { tokens: number; percent: number; needsAction: boolean } {
         const tokens = this.estimatedTokens;
         const percent = Math.round((tokens / CONTEXT_WINDOW) * 100);
         return {
@@ -62,28 +70,52 @@ export class TokenTracker {
 const CONTEXT_WINDOW = 200_000;
 
 /**
- * 按消息内容粗略估算 token 数，并对中英文混合内容加安全系数。
+ * 统计单条消息中的文本、工具输入和工具输出字符数。
  *
- * @param messages 待估算的模型消息列表。
- * @returns
+ * @param message 待统计的模型消息。
+ * @returns 消息内容的近似字符数。
  */
-export function estimateMessageTokens(messages: ModelMessage[]): number {
+function countMessageChars(message: ModelMessage): number {
     let chars = 0;
-    for (const msg of messages) {
-        if (typeof msg.content === 'string') {
-            chars += msg.content.length;
-        } else if (Array.isArray(msg.content)) {
-            for (const part of msg.content) {
-                if ('text' in part && typeof part.text === 'string') {
-                    chars += part.text.length;
-                } else if ('output' in part) {
-                    const out =
-                        typeof part.output === 'string' ? part.output : JSON.stringify(part.output);
-                    chars += out.length;
-                }
-            }
+    if (typeof message.content === 'string') {
+        return message.content.length;
+    }
+    if (!Array.isArray(message.content)) return chars;
+
+    for (const part of message.content) {
+        if ('text' in part && typeof part.text === 'string') {
+            chars += part.text.length;
+        } else if ('output' in part) {
+            chars += toolResultOutputToText(part.output).length;
+        } else if ('input' in part) {
+            chars += JSON.stringify(part.input)?.length ?? 0;
         }
     }
+    return chars;
+}
+
+/**
+ * 汇总多条消息的近似字符数。
+ *
+ * @param messages 待统计的模型消息列表。
+ * @returns 消息列表的近似字符总数。
+ */
+function countMessagesChars(messages: ModelMessage[]): number {
+    let chars = 0;
+    for (const message of messages) {
+        chars += countMessageChars(message);
+    }
+    return chars;
+}
+
+/**
+ * 按字符数和中文安全系数估算消息列表的 token 占用。
+ *
+ * @param messages 待估算的模型消息列表。
+ * @returns 估算得到的 token 数。
+ */
+export function estimateMessageTokens(messages: ModelMessage[]): number {
+    const chars = countMessagesChars(messages);
     // 4 chars per token, with 1.2x safety factor for Chinese
     return Math.ceil((chars / 4) * 1.2);
 }
@@ -93,7 +125,7 @@ export function estimateMessageTokens(messages: ModelMessage[]): number {
 interface TruncationConfig {
     /** 单个工具结果允许保留的最大字符数。 */
     maxSingleResult: number;
-    /** 整体上下文中工具结果可占用的字符预算。 */
+    /** 所有上下文允许使用的工具结果字符预算。 */
     contextBudgetChars: number;
 }
 
@@ -103,23 +135,16 @@ const DEFAULT_TRUNCATION: TruncationConfig = {
 };
 
 /**
- * 截断过大的工具结果，并在总预算超限时清理最早的工具输出。
+ * 先截断超大的单个工具结果，再压缩总量超预算的旧结果。
  *
- * @param messages 待处理的消息列表。
- * @param config 截断阈值与总字符预算。
- * @returns
+ * @param messages 当前会话消息列表。
+ * @param config 工具结果截断和总预算配置。
+ * @returns 处理后的消息列表及各类处理数量。
  */
 export function truncateToolResults(
     messages: ModelMessage[],
     config: TruncationConfig = DEFAULT_TRUNCATION,
-): {
-    /** 截断或清理后的消息列表。 */
-    messages: ModelMessage[];
-    /** 被单结果截断的输出数量。 */
-    truncated: number;
-    /** 因总预算超限被整体清理的工具消息数量。 */
-    compacted: number;
-} {
+): { messages: ModelMessage[]; truncated: number; compacted: number } {
     let truncated = 0;
     let compacted = 0;
 
@@ -128,19 +153,22 @@ export function truncateToolResults(
         if (msg.role !== 'tool' || !Array.isArray(msg.content)) return msg;
 
         const newContent = msg.content.map((part: any) => {
-            if (!part.output || typeof part.output !== 'string') return part;
-            if (part.output.length <= config.maxSingleResult) return part;
+            if (!part.output) return part;
+            const outputText = toolResultOutputToText(part.output);
+            if (outputText.length <= config.maxSingleResult) return part;
 
             truncated++;
             const maxChars = config.maxSingleResult;
             const headSize = Math.floor(maxChars * 0.6);
             const tailSize = Math.floor(maxChars * 0.4);
-            const head = part.output.slice(0, headSize);
-            const tail = part.output.slice(-tailSize);
+            const head = outputText.slice(0, headSize);
+            const tail = outputText.slice(-tailSize);
 
             return {
                 ...part,
-                output: `${head}\n\n[truncated: ${part.output.length} → ${maxChars} chars]\n\n${tail}`,
+                output: textToolResultOutput(
+                    `${head}\n\n[truncated: ${outputText.length} → ${maxChars} chars]\n\n${tail}`,
+                ),
             };
         });
 
@@ -154,7 +182,11 @@ export function truncateToolResults(
             return (
                 sum +
                 (msg.content as any[]).reduce(
-                    (s, p) => s + ((p.output as string)?.length || (p.text as string)?.length || 0),
+                    (s, p) =>
+                        s +
+                        (p.output
+                            ? toolResultOutputToText(p.output).length
+                            : (p.text as string)?.length || 0),
                     0,
                 )
             );
@@ -168,14 +200,16 @@ export function truncateToolResults(
             if (msg.role !== 'tool' || !Array.isArray(msg.content)) continue;
             const toolName = (msg.content as any[])[0]?.toolName || 'unknown';
             const oldSize = (msg.content as any[]).reduce(
-                (s: number, p: any) => s + ((p.output as string)?.length || 0),
+                (s: number, p: any) => s + (p.output ? toolResultOutputToText(p.output).length : 0),
                 0,
             );
             result[i] = {
                 ...msg,
                 content: (msg.content as any[]).map((p: any) => ({
                     ...p,
-                    output: `[compacted: ${toolName} output removed to free context]`,
+                    output: textToolResultOutput(
+                        `[compacted: ${toolName} output removed to free context]`,
+                    ),
                 })),
             };
             totalChars -= oldSize;
@@ -189,11 +223,11 @@ export function truncateToolResults(
 // ── Layer 3: TTL Pruning ─────────────────────────────
 
 interface TTLConfig {
-    /** 超过该时间后对工具结果做保留头尾的软裁剪。 */
+    /** 触发软清理的结果存活时间（毫秒）。 */
     softTTLMs: number;
-    /** 超过该时间后把工具结果整体替换成占位文本。 */
+    /** 触发硬清理的结果存活时间（毫秒）。 */
     hardTTLMs: number;
-    /** 软裁剪时头尾分别保留的字符数。 */
+    /** 软清理时保留的头尾字符数。 */
     keepHeadTail: number;
 }
 
@@ -204,21 +238,21 @@ const DEFAULT_TTL: TTLConfig = {
 };
 
 export interface PruneResult {
-    /** TTL 处理后的消息列表。 */
+    /** 清理后的消息列表。 */
     messages: ModelMessage[];
-    /** 被软裁剪的工具结果数量。 */
+    /** 被软清理的工具结果数量。 */
     softPruned: number;
     /** 被硬清理的工具结果数量。 */
     hardPruned: number;
 }
 
 /**
- * 根据工具结果年龄做 TTL 裁剪，同时保留包含错误信息的结果。
+ * 按消息时间戳清理过期工具结果，同时保留错误结果和用户/助手消息。
  *
- * @param messages 待裁剪的消息列表。
- * @param timestamps 消息索引到创建时间戳的映射。
- * @param config TTL 阈值与保留长度配置。
- * @returns
+ * @param messages 当前会话消息列表。
+ * @param timestamps 消息索引到写入时间的映射。
+ * @param config 软清理、硬清理和保留长度配置。
+ * @returns 清理后的消息列表及各类清理数量。
  */
 export function ttlPrune(
     messages: ModelMessage[],
@@ -240,7 +274,7 @@ export function ttlPrune(
 
         // Preserve error experiences — never prune failed tool results
         const outputText = (msg.content as any[])
-            .map((p: any) => (typeof p.output === 'string' ? p.output : ''))
+            .map((p: any) => (p.output ? toolResultOutputToText(p.output) : ''))
             .join('');
         const isError = /error|失败|不存在|denied|refused|timeout/i.test(outputText);
         if (isError) return msg;
@@ -253,7 +287,7 @@ export function ttlPrune(
                 ...msg,
                 content: msg.content.map((part: any) => ({
                     ...part,
-                    output: `[tool result expired: ${toolName}]`,
+                    output: textToolResultOutput(`[tool result expired: ${toolName}]`),
                 })),
             };
         }
@@ -261,17 +295,20 @@ export function ttlPrune(
         // Soft prune: keep head + tail, replace middle
         if (age >= config.softTTLMs) {
             const newContent = msg.content.map((part: any) => {
-                if (!part.output || typeof part.output !== 'string') return part;
-                if (part.output.length <= config.keepHeadTail * 2) return part;
+                if (!part.output) return part;
+                const outputText = toolResultOutputToText(part.output);
+                if (outputText.length <= config.keepHeadTail * 2) return part;
 
                 softPruned++;
-                const head = part.output.slice(0, config.keepHeadTail);
-                const tail = part.output.slice(-config.keepHeadTail);
-                const removed = part.output.length - config.keepHeadTail * 2;
+                const head = outputText.slice(0, config.keepHeadTail);
+                const tail = outputText.slice(-config.keepHeadTail);
+                const removed = outputText.length - config.keepHeadTail * 2;
 
                 return {
                     ...part,
-                    output: `${head}\n\n[soft pruned: ${removed} chars removed, content older than ${Math.round(config.softTTLMs / 60000)}min]\n\n${tail}`,
+                    output: textToolResultOutput(
+                        `${head}\n\n[soft pruned: ${removed} chars removed, content older than ${Math.round(config.softTTLMs / 60000)}min]\n\n${tail}`,
+                    ),
                 };
             });
             return { ...msg, content: newContent };
@@ -286,26 +323,26 @@ export function ttlPrune(
 // ── Combined Defense ─────────────────────────────────
 
 export interface DefenseResult {
-    /** 防御处理后的消息列表。 */
+    /** 完成防御处理后的消息列表。 */
     messages: ModelMessage[];
-    /** 处理后的最终 token 估算值。 */
+    /** 防御处理后的 token 估算值。 */
     tokenEstimate: number;
-    /** 被单结果截断的输出数量。 */
+    /** 被单条结果截断的数量。 */
     truncated: number;
-    /** 因总预算超限被整体清理的工具消息数量。 */
+    /** 因总预算超限而被压缩的数量。 */
     compacted: number;
-    /** TTL 软裁剪数量。 */
+    /** 被软清理的工具结果数量。 */
     softPruned: number;
-    /** TTL 硬清理数量。 */
+    /** 被硬清理的工具结果数量。 */
     hardPruned: number;
 }
 
 /**
- * 组合执行工具结果截断、TTL 裁剪和最终 token 估算。
+ * 依次执行工具结果截断、TTL 清理和最终 token 估算。
  *
- * @param messages 原始消息列表。
- * @param timestamps 工具消息索引到创建时间戳的映射。
- * @returns
+ * @param messages 当前会话消息列表。
+ * @param timestamps 消息索引到写入时间的映射。
+ * @returns 防御处理后的消息和统计结果。
  */
 export function applyDefense(
     messages: ModelMessage[],

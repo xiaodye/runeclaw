@@ -7,6 +7,10 @@
     "bin": {
         "runeclaw": "src/index.ts"
     },
+    "engines": {
+        "pnpm": ">=10.0.0",
+        "node": "^22.19.0 || >=24.0.0"
+    },
     "scripts": {
         "start": "tsx src/index.ts",
         "init": "tsx src/index.ts init",
