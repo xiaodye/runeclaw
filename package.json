@@ -31,12 +31,16 @@
         "dotenv": "^17.4.2",
         "fast-glob": "^3.3.3",
         "hono": "^4.12.27",
+        "ink": "^7.1.1",
+        "ink-select-input": "^6.2.0",
+        "react": "^19.2.8",
         "sqlite-vec": "^0.1.9",
         "turndown": "^7.2.4",
         "zod": "^3.25.76"
     },
     "devDependencies": {
         "@types/better-sqlite3": "^7.6.13",
+        "@types/react": "^19.2.18",
         "@types/json-schema": "^7.0.15",
         "@types/node": "^25.9.3",
         "@types/turndown": "^5.0.6",
