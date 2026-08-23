@@ -160,8 +160,8 @@ interface TTLConfig {
 }
 
 const DEFAULT_TTL: TTLConfig = {
-    softTTLMs: 5 * 60 * 1000, // 5 minutes
-    hardTTLMs: 10 * 60 * 1000, // 10 minutes
+    softTTLMs: 30 * 60 * 1000, // 30 minutes
+    hardTTLMs: 60 * 60 * 1000, // 60 minutes
     keepHeadTail: 1500, // chars to keep in soft prune
     keepRecentToolResults: DEFAULT_KEEP_RECENT_TOOL_RESULTS,
 };
