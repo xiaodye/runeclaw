@@ -3,6 +3,11 @@ import { ToolRegistry } from '../tools/registry';
 import { detect, recordCall, recordResult, resetHistory } from './loop-detection';
 import { isRetryable, calculateDelay, sleep } from './retry';
 import { type UsageTracker, normalizeUsage } from '../usage/tracker';
+import {
+    compactContext,
+    estimateMessageTokens,
+    COMPACT_TOKEN_THRESHOLD,
+} from '../context/defense.js';
 
 const MAX_STEPS = 15;
 const MAX_RETRIES = 3;
@@ -25,8 +30,15 @@ export async function agentLoop(
     tracker?: UsageTracker,
 ) {
     let step = 0;
-    let totalTokens = 0;
     resetHistory();
+
+    // 消息索引 → 写入时间戳，供 TTL 清理使用
+    const timestamps = new Map<number, number>();
+    for (let i = 0; i < messages.length; i++) timestamps.set(i, Date.now());
+    const pushMessage = (msg: ModelMessage) => {
+        messages.push(msg);
+        timestamps.set(messages.length - 1, Date.now());
+    };
 
     while (step < MAX_STEPS) {
         step++;
@@ -71,7 +83,7 @@ export async function agentLoop(
                                 if (detection.level === 'critical') {
                                     shouldBreak = true;
                                 } else {
-                                    messages.push({
+                                    pushMessage({
                                         role: 'user' as const,
                                         content: `[系统提醒] ${detection.message}。请换一个思路解决问题，不要重复同样的操作。`,
                                     });
@@ -117,13 +129,11 @@ export async function agentLoop(
             break;
         }
 
-        messages.push(...stepResponse!.messages);
+        for (const msg of stepResponse!.messages) pushMessage(msg);
 
         // 把 usage 喂给 tracker；tracker 内部按四类 token 分别累加并算 cost
         const norm = normalizeUsage(stepUsage);
         const stepRecord = tracker?.record(model?.modelId || 'mock-model', norm);
-        totalTokens +=
-            norm.inputTokens + norm.outputTokens + norm.cacheReadTokens + norm.cacheWriteTokens;
 
         // cache 命中时才打印一行简洁状态，让 cache hit 立刻可见
         if (stepRecord && (norm.cacheReadTokens > 0 || norm.cacheWriteTokens > 0)) {
@@ -138,14 +148,16 @@ export async function agentLoop(
             console.log(`  [${tag}] ${detail} tokens · 本步 $${stepRecord.cost.toFixed(5)}`);
         }
 
-        if (totalTokens > TOKEN_BUDGET * 0.9) {
+        // 上下文超过窗口预算时：TTL 清理后仍超则 LLM 摘要压缩
+        if (estimateMessageTokens(messages) > COMPACT_TOKEN_THRESHOLD) {
+            console.log(`  [Token] ~${estimateMessageTokens(messages)} 超预算，触发压缩...`);
+            const compacted = await compactContext(model, messages, timestamps);
+            messages.splice(0, messages.length, ...compacted.messages);
+            timestamps.clear();
+            for (let i = 0; i < messages.length; i++) timestamps.set(i, Date.now());
             console.log(
-                `  [Token] ${totalTokens}/${TOKEN_BUDGET} (${Math.round((totalTokens / TOKEN_BUDGET) * 100)}%)`,
+                `  [压缩] TTL 软剪 ${compacted.softPruned}/硬清 ${compacted.hardPruned}，摘要移除 ${compacted.compressedCount} 条 → ~${compacted.tokenEstimate} tokens`,
             );
-        }
-        if (totalTokens > TOKEN_BUDGET) {
-            console.log('\n[Token 预算耗尽]');
-            break;
         }
 
         if (!hasToolCall) {

@@ -39,6 +39,7 @@ const CLEARABLE_TOOLS = new Set([
 const KEEP_RECENT_TOOL_RESULTS = 3;
 
 /**
+ * @deprecated 不再使用
  * 清理较早且可安全丢弃的工具结果，保留最近几次结果以维持上下文连续性。
  *
  * @param messages 当前会话消息列表。

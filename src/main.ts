@@ -18,8 +18,7 @@ import {
     sessionContext,
     toolGuide,
 } from './context/prompt-builder';
-import { estimateTokens, microcompact, summarize } from './context/compressor';
-import { estimateMessageTokens, applyDefense } from './context/defense';
+import { estimateMessageTokens } from './context/defense';
 import { buildContextSnapshot, renderContextView, renderUsageView } from './context/view';
 import { UsageTracker } from './usage/tracker';
 import { ModelMessage } from 'ai';

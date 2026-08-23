@@ -12,7 +12,7 @@ export const bashTool: ToolDefinition = {
     },
     isConcurrencySafe: false,
     isReadOnly: false,
-    maxResultChars: 3000,
+    maxResultChars: 8000,
     execute: async ({ command }: { command: string }) => {
         try {
             execSync('echo test', { stdio: 'ignore' });

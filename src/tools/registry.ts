@@ -28,7 +28,8 @@ export interface ToolDefinition {
     searchHint?: string;
 }
 
-const DEFAULT_MAX_RESULT_CHARS = 3000;
+/** 通用工具结果默认截断上限（字符），约 2000 token。 */
+const DEFAULT_MAX_RESULT_CHARS = 8000;
 
 export class ToolRegistry {
     /** 当前注册的工具定义，按工具名索引。 */
@@ -104,7 +105,7 @@ export class ToolRegistry {
                 parameters: tool.inputSchema as Record<string, unknown>,
                 isConcurrencySafe: true,
                 isReadOnly: true,
-                maxResultChars: 3000,
+                maxResultChars: 8000,
                 profile: ['full'],
                 shouldDefer: true,
                 searchHint: `${serverName} ${tool.name} ${tool.description}`,
