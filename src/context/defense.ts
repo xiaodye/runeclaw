@@ -1,5 +1,6 @@
 import type { ModelMessage } from 'ai';
 import { textToolResultOutput, toolResultOutputToText } from './tool-result-output.js';
+import { summarize } from './compressor.js';
 
 // ── Layer 1: Token Estimation ────────────────────────
 
@@ -69,6 +70,9 @@ export class TokenTracker {
 
 const CONTEXT_WINDOW = 200_000;
 
+/** 上下文 token 超过该阈值时，TTL 清理后仍超则触发 LLM 摘要压缩（约窗口 75%）。 */
+export const COMPACT_TOKEN_THRESHOLD = Math.floor(CONTEXT_WINDOW * 0.75);
+
 /**
  * 统计单条消息中的文本、工具输入和工具输出字符数。
  *
@@ -120,107 +124,29 @@ export function estimateMessageTokens(messages: ModelMessage[]): number {
     return Math.ceil((chars / 4) * 1.2);
 }
 
-// ── Layer 2: Dynamic Tool Result Truncation ──────────
+// ── Layer 2: TTL Pruning ─────────────────────────────
 
-interface TruncationConfig {
-    /** 单个工具结果允许保留的最大字符数。 */
-    maxSingleResult: number;
-    /** 所有上下文允许使用的工具结果字符预算。 */
-    contextBudgetChars: number;
-}
-
-const DEFAULT_TRUNCATION: TruncationConfig = {
-    maxSingleResult: Math.floor(CONTEXT_WINDOW * 0.5 * 2), // 50% of window, 2 chars/token
-    contextBudgetChars: Math.floor(CONTEXT_WINDOW * 0.75 * 4), // 75% of window, 4 chars/token
-};
+/** 默认保留最近 5 个工具结果不被 TTL 清理。 */
+const DEFAULT_KEEP_RECENT_TOOL_RESULTS = 5;
 
 /**
- * 先截断超大的单个工具结果，再压缩总量超预算的旧结果。
+ * 找出最近 keepRecent 个工具结果消息的索引（从末尾往前数）。
  *
  * @param messages 当前会话消息列表。
- * @param config 工具结果截断和总预算配置。
- * @returns 处理后的消息列表及各类处理数量。
+ * @param keepRecent 需要保留的最近工具结果数量。
+ * @returns 受保护的工具结果消息索引集合。
  */
-export function truncateToolResults(
-    messages: ModelMessage[],
-    config: TruncationConfig = DEFAULT_TRUNCATION,
-): { messages: ModelMessage[]; truncated: number; compacted: number } {
-    let truncated = 0;
-    let compacted = 0;
-
-    // Pass 1: single-result truncation (Head/Tail 60/40)
-    let result = messages.map((msg) => {
-        if (msg.role !== 'tool' || !Array.isArray(msg.content)) return msg;
-
-        const newContent = msg.content.map((part: any) => {
-            if (!part.output) return part;
-            const outputText = toolResultOutputToText(part.output);
-            if (outputText.length <= config.maxSingleResult) return part;
-
-            truncated++;
-            const maxChars = config.maxSingleResult;
-            const headSize = Math.floor(maxChars * 0.6);
-            const tailSize = Math.floor(maxChars * 0.4);
-            const head = outputText.slice(0, headSize);
-            const tail = outputText.slice(-tailSize);
-
-            return {
-                ...part,
-                output: textToolResultOutput(
-                    `${head}\n\n[truncated: ${outputText.length} → ${maxChars} chars]\n\n${tail}`,
-                ),
-            };
-        });
-
-        return { ...msg, content: newContent };
-    });
-
-    // Pass 2: total budget enforcement — compact oldest tool results first
-    let totalChars = result.reduce((sum, msg) => {
-        if (typeof msg.content === 'string') return sum + msg.content.length;
-        if (Array.isArray(msg.content)) {
-            return (
-                sum +
-                (msg.content as any[]).reduce(
-                    (s, p) =>
-                        s +
-                        (p.output
-                            ? toolResultOutputToText(p.output).length
-                            : (p.text as string)?.length || 0),
-                    0,
-                )
-            );
-        }
-        return sum;
-    }, 0);
-
-    if (totalChars > config.contextBudgetChars) {
-        for (let i = 0; i < result.length && totalChars > config.contextBudgetChars; i++) {
-            const msg = result[i];
-            if (msg.role !== 'tool' || !Array.isArray(msg.content)) continue;
-            const toolName = (msg.content as any[])[0]?.toolName || 'unknown';
-            const oldSize = (msg.content as any[]).reduce(
-                (s: number, p: any) => s + (p.output ? toolResultOutputToText(p.output).length : 0),
-                0,
-            );
-            result[i] = {
-                ...msg,
-                content: (msg.content as any[]).map((p: any) => ({
-                    ...p,
-                    output: textToolResultOutput(
-                        `[compacted: ${toolName} output removed to free context]`,
-                    ),
-                })),
-            };
-            totalChars -= oldSize;
-            compacted++;
+function recentToolResultIndices(messages: ModelMessage[], keepRecent: number): Set<number> {
+    const protectedIndices = new Set<number>();
+    let count = 0;
+    for (let i = messages.length - 1; i >= 0 && count < keepRecent; i--) {
+        if (messages[i].role === 'tool') {
+            protectedIndices.add(i);
+            count++;
         }
     }
-
-    return { messages: result, truncated, compacted };
+    return protectedIndices;
 }
-
-// ── Layer 3: TTL Pruning ─────────────────────────────
 
 interface TTLConfig {
     /** 触发软清理的结果存活时间（毫秒）。 */
@@ -229,12 +155,15 @@ interface TTLConfig {
     hardTTLMs: number;
     /** 软清理时保留的头尾字符数。 */
     keepHeadTail: number;
+    /** 保留最近几个工具结果、绝不修剪的数量。 */
+    keepRecentToolResults?: number;
 }
 
 const DEFAULT_TTL: TTLConfig = {
     softTTLMs: 5 * 60 * 1000, // 5 minutes
     hardTTLMs: 10 * 60 * 1000, // 10 minutes
     keepHeadTail: 1500, // chars to keep in soft prune
+    keepRecentToolResults: DEFAULT_KEEP_RECENT_TOOL_RESULTS,
 };
 
 export interface PruneResult {
@@ -247,7 +176,7 @@ export interface PruneResult {
 }
 
 /**
- * 按消息时间戳清理过期工具结果，同时保留错误结果和用户/助手消息。
+ * 按消息时间戳清理过期工具结果，同时保留错误结果、最近工具结果和用户/助手消息。
  *
  * @param messages 当前会话消息列表。
  * @param timestamps 消息索引到写入时间的映射。
@@ -262,10 +191,15 @@ export function ttlPrune(
     const now = Date.now();
     let softPruned = 0;
     let hardPruned = 0;
+    const keepRecent = config.keepRecentToolResults ?? DEFAULT_KEEP_RECENT_TOOL_RESULTS;
+    const protectedIndices = recentToolResultIndices(messages, keepRecent);
 
     const result = messages.map((msg, idx) => {
         // Only prune tool results, never user/assistant messages
         if (msg.role !== 'tool' || !Array.isArray(msg.content)) return msg;
+
+        // 最近几个工具结果属于活跃推理链，绝不修剪。
+        if (protectedIndices.has(idx)) return msg;
 
         const ts = timestamps.get(idx);
         if (!ts) return msg;
@@ -327,10 +261,6 @@ export interface DefenseResult {
     messages: ModelMessage[];
     /** 防御处理后的 token 估算值。 */
     tokenEstimate: number;
-    /** 被单条结果截断的数量。 */
-    truncated: number;
-    /** 因总预算超限而被压缩的数量。 */
-    compacted: number;
     /** 被软清理的工具结果数量。 */
     softPruned: number;
     /** 被硬清理的工具结果数量。 */
@@ -338,7 +268,7 @@ export interface DefenseResult {
 }
 
 /**
- * 依次执行工具结果截断、TTL 清理和最终 token 估算。
+ * 执行 TTL 清理并估算最终 token 数。
  *
  * @param messages 当前会话消息列表。
  * @param timestamps 消息索引到写入时间的映射。
@@ -348,13 +278,9 @@ export function applyDefense(
     messages: ModelMessage[],
     timestamps: Map<number, number>,
 ): DefenseResult {
-    // Layer 2: truncate oversized tool results
-    const trunc = truncateToolResults(messages);
-    let result = trunc.messages;
-
-    // Layer 3: TTL prune old tool results
-    const prune = ttlPrune(result, timestamps);
-    result = prune.messages;
+    // Layer 2: TTL prune old tool results
+    const prune = ttlPrune(messages, timestamps);
+    const result = prune.messages;
 
     // Layer 1: estimate final token count
     const tokenEstimate = estimateMessageTokens(result);
@@ -362,9 +288,53 @@ export function applyDefense(
     return {
         messages: result,
         tokenEstimate,
-        truncated: trunc.truncated,
-        compacted: trunc.compacted,
         softPruned: prune.softPruned,
         hardPruned: prune.hardPruned,
+    };
+}
+
+// ── Layer 3: LLM Compression Fallback ────────────────
+
+/** 包含 LLM 摘要压缩结果的防御统计。 */
+export interface CompactResult extends DefenseResult {
+    /** 本次生成的对话压缩摘要。 */
+    summary: string;
+    /** 被摘要压缩移除的原始消息数量。 */
+    compressedCount: number;
+}
+
+/**
+ * TTL 清理后若上下文仍超过预算，则调用模型把旧对话摘要压缩。
+ *
+ * @param model 用于生成摘要的 AI SDK 模型实例。
+ * @param messages 当前会话消息列表。
+ * @param timestamps 消息索引到写入时间的映射。
+ * @returns 压缩后的消息及各项统计。
+ */
+export async function compactContext(
+    model: any,
+    messages: ModelMessage[],
+    timestamps: Map<number, number>,
+): Promise<CompactResult> {
+    // 第一步：TTL 清理过期工具结果
+    const defended = applyDefense(messages, timestamps);
+    let result = defended.messages;
+    let summary = '';
+    let compressedCount = 0;
+
+    // 第二步：仍超预算则走 LLM 摘要压缩
+    if (defended.tokenEstimate > COMPACT_TOKEN_THRESHOLD) {
+        const compacted = await summarize(model, result);
+        result = compacted.messages;
+        summary = compacted.summary;
+        compressedCount = compacted.compressedCount;
+    }
+
+    return {
+        ...defended,
+        messages: result,
+        tokenEstimate: estimateMessageTokens(result),
+        summary,
+        compressedCount,
     };
 }

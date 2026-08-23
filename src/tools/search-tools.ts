@@ -68,7 +68,7 @@ export const grepTool: ToolDefinition = {
     },
     isConcurrencySafe: true,
     isReadOnly: true,
-    maxResultChars: 3000,
+    maxResultChars: 8000,
     execute: async ({ pattern, path = '.' }: { pattern: string; path?: string }) => {
         const baseDir = resolve(path);
         const regex = new RegExp(pattern, 'i');

@@ -13,7 +13,7 @@ export const readFileTool: ToolDefinition = {
     },
     isConcurrencySafe: true,
     isReadOnly: true,
-    maxResultChars: 3000,
+    maxResultChars: 16000, // 读文件是大结果工具，保留更多上下文
     execute: async ({ path }: { path: string }) => {
         const resolved = resolve(path);
         if (!existsSync(resolved)) return `文件不存在: ${path}`;

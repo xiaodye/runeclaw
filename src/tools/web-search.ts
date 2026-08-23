@@ -16,7 +16,7 @@ export const tavilySearchTool: ToolDefinition = {
     },
     isConcurrencySafe: true,
     isReadOnly: true,
-    maxResultChars: 3000,
+    maxResultChars: 8000,
     execute: async ({ query, max_results = 5 }: { query: string; max_results?: number }) => {
         const apiKey = process.env.TAVILY_API_KEY;
         if (!apiKey) return '[web_search] 未配置 TAVILY_API_KEY，请在 .env 中设置';
@@ -67,7 +67,7 @@ export const serperSearchTool: ToolDefinition = {
     },
     isConcurrencySafe: true,
     isReadOnly: true,
-    maxResultChars: 3000,
+    maxResultChars: 8000,
     execute: async ({ query, max_results = 5 }: { query: string; max_results?: number }) => {
         const apiKey = process.env.SERPER_API_KEY;
         if (!apiKey) return '[web_search] 未配置 SERPER_API_KEY，请在 .env 中设置';
@@ -121,7 +121,7 @@ export const webFetchTool: ToolDefinition = {
     },
     isConcurrencySafe: true,
     isReadOnly: true,
-    maxResultChars: 3000,
+    maxResultChars: 16000, // 抓网页是大结果工具，保留更多上下文
     execute: async ({ url }: { url: string }) => {
         try {
             const res = await fetch(url, {
