@@ -56,6 +56,7 @@ import { SpawnContext } from './agents/spawn';
 import { createSpawnTool } from './tools/spawn-tools';
 import { createAgentCommands } from './commands/agents';
 import { loadConfig } from './config/loader';
+import { c } from './ui/theme';
 
 // ── 加载配置 ────────────────────────────────
 const config = loadConfig();
@@ -254,7 +255,7 @@ export async function startAgent() {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
 
     function ask() {
-        rl.question('\nYou: ', async (input) => {
+        rl.question(`\n${c.cyan}${c.bold}You:${c.reset} `, async (input) => {
             const trimmed = input.trim();
             if (!trimmed || trimmed === 'exit') {
                 console.log('Bye!');
@@ -308,20 +309,22 @@ export async function startAgent() {
     const toolCount = registry.getActiveTools().length;
     const hooks = hookPipeline.list();
 
-    console.log('RuneClaw v1.0 (type "exit" to quit)');
-    console.log('快捷命令：');
-    console.log('  /agents           — 查看子 Agent 记录');
-    console.log('  /cron             — 查看定时任务');
-    console.log('  /role [角色]      — 查看/切换角色');
+    console.log(`${c.bold}${c.cyan}RuneClaw v1.0${c.reset} ${c.dim}(type "exit" to quit)${c.reset}`);
+    console.log(`${c.dim}快捷命令：${c.reset}`);
+    console.log(`${c.dim}  /agents           — 查看子 Agent 记录${c.reset}`);
+    console.log(`${c.dim}  /cron             — 查看定时任务${c.reset}`);
+    console.log(`${c.dim}  /role [角色]      — 查看/切换角色${c.reset}`);
     console.log('');
-    console.log(`  当前角色: ${role}，可用工具: ${toolCount} 个`);
+    console.log(
+        `  ${c.green}当前角色${c.reset}: ${c.yellow}${role}${c.reset}，可用工具: ${c.green}${toolCount}${c.reset} 个`,
+    );
     console.log(
         `  Sub-Agent: 最大深度 ${agentRegistry.getConfig().maxSpawnDepth}，最大并发 ${agentRegistry.getConfig().maxConcurrent}`,
     );
     console.log('');
-    console.log('  试试：');
-    console.log('    帮我对比 Hono、Fastify 和 Express 的性能和生态');
-    console.log('    /agents       — 查看子 Agent 执行记录');
+    console.log(`${c.dim}  试试：${c.reset}`);
+    console.log(`${c.dim}    帮我对比 Hono、Fastify 和 Express 的性能和生态${c.reset}`);
+    console.log(`${c.dim}    /agents       — 查看子 Agent 执行记录${c.reset}`);
     console.log('');
 
     // RAG 知识库：仅在显式传入 --rag 时才自动导入 docs/ 下的文档
