@@ -17,6 +17,7 @@ const HELP_TEXT = `RuneClaw — 本地 AI Agent 运行时
 选项:
   -h, --help       显示帮助
   -v, --version    显示版本号
+  --rag            启动时自动导入 docs/ 下的文档到知识库
 `;
 
 /**
@@ -61,6 +62,7 @@ async function main(): Promise<void> {
         case 'start':
         case 'continue':
         case '--continue':
+        case '--rag':
         case undefined: {
             const { startAgent } = await import('./main');
             await startAgent().catch((error: unknown) => {

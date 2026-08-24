@@ -324,7 +324,9 @@ export async function startAgent() {
     console.log('    /agents       — 查看子 Agent 执行记录');
     console.log('');
 
-    if (fs.existsSync('docs')) {
+    // RAG 知识库：仅在显式传入 --rag 时才自动导入 docs/ 下的文档
+    const enableRag = process.argv.includes('--rag');
+    if (enableRag && fs.existsSync('docs')) {
         const files = fs.readdirSync('docs').filter((f) => f.endsWith('.md'));
         if (files.length > 0) {
             console.log(`  发现 ${files.length} 个文档，自动导入知识库...`);
@@ -342,6 +344,8 @@ export async function startAgent() {
             }
             console.log(`  知识库就绪，共 ${vectorStore.size()} 个片段\n`);
         }
+    } else if (fs.existsSync('docs')) {
+        console.log('  提示: 检测到 docs/ 目录，加 --rag 参数可自动导入知识库\n');
     }
 
     ask();

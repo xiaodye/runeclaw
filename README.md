@@ -13,7 +13,7 @@ RuneClaw 是一个基于 TypeScript 的本地 AI Agent CLI。它把模型调用�
 - 本地文件工具：读取、写入、编辑、列目录、grep、glob
 - Shell 工具：可执行命令并返回输出
 - 记忆系统：跨会话保存、读取、搜索记忆
-- RAG 知识库：自动导入 `docs/`，也支持手动导入其它文档
+- RAG 知识库：启动时加 `--rag` 自动导入 `docs/`，也支持手动导入其它文档
 - MCP 接入：可挂载外部工具，当前默认有 GitHub mock 示例
 - 子 Agent：支持任务分发与执行记录查看
 - 定时任务：支持查看任务与执行日志
@@ -222,7 +222,7 @@ src/
 
 ## 说明
 
-- 启动时会自动导入 `docs/` 下的 `.md` 文档到知识库
+- 启动时默认**不**自动导入知识库；加 `--rag`（或 `pnpm start:rag`）才会导入 `docs/` 下的 `.md` 文档
 - 当前项目里的飞书配置只应通过 `.env` 提供，不要把 secret 写进 `runeclaw.config.json`
 - Web 搜索工具会优先使用 `TAVILY_API_KEY`，没有时可用 `SERPER_API_KEY`
 
