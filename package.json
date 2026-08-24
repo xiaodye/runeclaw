@@ -1,25 +1,43 @@
 {
-    "name": "runeclaw",
-    "version": "1.0.0",
+    "name": "@xiaodye/runeclaw",
+    "version": "1.0.1",
     "description": "Local AI agent runtime for tools, memory, RAG, sub-agents, plugins, cron jobs, and channels.",
-    "main": "index.js",
+    "main": "dist/index.js",
     "type": "module",
     "bin": {
-        "runeclaw": "src/index.ts"
+        "runeclaw": "dist/index.js"
     },
+    "files": [
+        "dist"
+    ],
     "engines": {
         "pnpm": ">=10.0.0",
         "node": "^22.19.0 || >=24.0.0"
     },
     "scripts": {
-        "start": "tsx src/index.ts",
-        "init": "tsx src/index.ts init",
-        "continue": "tsx src/index.ts --continue"
+        "dev": "tsx src/index.ts",
+        "build": "node scripts/build.mjs",
+        "start": "node dist/index.js",
+        "init": "node dist/index.js init",
+        "continue": "node dist/index.js --continue",
+        "release": "node scripts/release.mjs",
+        "prepublishOnly": "pnpm build",
+        "start:rag": "node dist/index.js --rag"
     },
-    "keywords": [],
-    "author": "",
+    "keywords": [
+        "ai",
+        "agent",
+        "cli",
+        "rag",
+        "llm",
+        "automation"
+    ],
+    "author": "xiaodye",
     "license": "ISC",
     "packageManager": "pnpm@10.17.0",
+    "publishConfig": {
+        "access": "public"
+    },
     "dependencies": {
         "@ai-sdk/openai": "^3.0.71",
         "@hono/node-server": "^1.14.1",
@@ -27,12 +45,15 @@
         "@modelcontextprotocol/client": "2.0.0-alpha.2",
         "ai": "^6.0.206",
         "better-sqlite3": "^12.10.1",
+        "boxen": "^8.0.1",
         "croner": "^10.0.1",
         "dotenv": "^17.4.2",
         "fast-glob": "^3.3.3",
         "hono": "^4.12.27",
         "ink": "^7.1.1",
         "ink-select-input": "^6.2.0",
+        "marked": "^18.0.10",
+        "marked-terminal": "^7.3.0",
         "react": "^19.2.8",
         "sqlite-vec": "^0.1.9",
         "turndown": "^7.2.4",
@@ -40,11 +61,12 @@
     },
     "devDependencies": {
         "@types/better-sqlite3": "^7.6.13",
-        "@types/react": "^19.2.18",
         "@types/json-schema": "^7.0.15",
         "@types/node": "^25.9.3",
+        "@types/react": "^19.2.18",
         "@types/turndown": "^5.0.6",
         "ajv": "^8.20.0",
+        "esbuild": "^0.28.1",
         "json-schema-typed": "^8.0.2",
         "prettier": "^3.9.6",
         "tsx": "^4.22.4",

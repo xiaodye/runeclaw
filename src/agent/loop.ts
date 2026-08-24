@@ -8,6 +8,8 @@ import {
     estimateMessageTokens,
     COMPACT_TOKEN_THRESHOLD,
 } from '../context/defense.js';
+import { c } from '../ui/theme';
+import { renderMarkdown } from '../ui/markdown';
 
 const MAX_STEPS = 15;
 const MAX_RETRIES = 3;
@@ -42,7 +44,7 @@ export async function agentLoop(
 
     while (step < MAX_STEPS) {
         step++;
-        console.log(`\n--- Step ${step} ---`);
+        console.log(`\n${c.dim}── Step ${step} ──${c.reset}`);
 
         let hasToolCall = false;
         let fullText = '';
@@ -74,12 +76,12 @@ export async function agentLoop(
                             hasToolCall = true;
                             lastToolCall = { name: part.toolName, input: part.input };
                             console.log(
-                                `  [调用: ${part.toolName}(${JSON.stringify(part.input)})]`,
+                                `  ${c.cyan}▸ 调用 ${c.bold}${part.toolName}${c.reset}${c.dim}(${JSON.stringify(part.input)})${c.reset}`,
                             );
 
                             const detection = detect(part.toolName, part.input);
                             if (detection.stuck) {
-                                console.log(`  ${detection.message}`);
+                                console.log(`  ${c.yellow}⚠ ${detection.message}${c.reset}`);
                                 if (detection.level === 'critical') {
                                     shouldBreak = true;
                                 } else {
@@ -100,7 +102,7 @@ export async function agentLoop(
                                     : JSON.stringify(part.output);
                             const preview =
                                 output.length > 120 ? output.slice(0, 120) + '...' : output;
-                            console.log(`  [结果: ${part.toolName}] ${preview}`);
+                            console.log(`  ${c.gray}↳ 结果 ${part.toolName}:${c.reset} ${c.dim}${preview}${c.reset}`);
                             if (lastToolCall) {
                                 recordResult(lastToolCall.name, lastToolCall.input, part.output);
                             }
@@ -115,7 +117,7 @@ export async function agentLoop(
             } catch (error) {
                 if (attempt > MAX_RETRIES || !isRetryable(error as Error)) throw error;
                 const delay = calculateDelay(attempt);
-                console.log(`  [重试] 第 ${attempt}/${MAX_RETRIES} 次，${delay}ms 后...`);
+                console.log(`  ${c.yellow}⚠ [重试] 第 ${attempt}/${MAX_RETRIES} 次，${delay}ms 后...${c.reset}`);
                 await sleep(delay);
                 hasToolCall = false;
                 fullText = '';
@@ -125,7 +127,7 @@ export async function agentLoop(
         }
 
         if (shouldBreak) {
-            console.log('\n[循环检测触发，Agent 已停止]');
+            console.log(`\n${c.yellow}[循环检测触发，Agent 已停止]${c.reset}`);
             break;
         }
 
@@ -139,36 +141,43 @@ export async function agentLoop(
         if (stepRecord && (norm.cacheReadTokens > 0 || norm.cacheWriteTokens > 0)) {
             const tag =
                 norm.cacheReadTokens > 0
-                    ? `\x1b[38;5;36m✓ cache hit\x1b[0m`
-                    : `\x1b[38;5;220m✎ cache write\x1b[0m`;
+                    ? `${c.green}✓ cache hit${c.reset}`
+                    : `${c.yellow}✎ cache write${c.reset}`;
             const detail =
                 norm.cacheReadTokens > 0
                     ? `read ${norm.cacheReadTokens}`
                     : `write ${norm.cacheWriteTokens}`;
-            console.log(`  [${tag}] ${detail} tokens · 本步 $${stepRecord.cost.toFixed(5)}`);
+            console.log(`  [${tag}] ${c.dim}${detail} tokens · 本步 $${stepRecord.cost.toFixed(5)}${c.reset}`);
         }
 
         // 上下文超过窗口预算时：TTL 清理后仍超则 LLM 摘要压缩
         if (estimateMessageTokens(messages) > COMPACT_TOKEN_THRESHOLD) {
-            console.log(`  [Token] ~${estimateMessageTokens(messages)} 超预算，触发压缩...`);
+            console.log(`  ${c.yellow}[Token] ~${estimateMessageTokens(messages)} 超预算，触发压缩...${c.reset}`);
             const compacted = await compactContext(model, messages, timestamps);
             messages.splice(0, messages.length, ...compacted.messages);
             timestamps.clear();
             for (let i = 0; i < messages.length; i++) timestamps.set(i, Date.now());
             console.log(
-                `  [压缩] TTL 软剪 ${compacted.softPruned}/硬清 ${compacted.hardPruned}，摘要移除 ${compacted.compressedCount} 条 → ~${compacted.tokenEstimate} tokens`,
+                `  ${c.yellow}[压缩] TTL 软剪 ${compacted.softPruned}/硬清 ${compacted.hardPruned}，摘要移除 ${compacted.compressedCount} 条 → ~${compacted.tokenEstimate} tokens${c.reset}`,
             );
         }
 
         if (!hasToolCall) {
-            if (fullText) console.log();
+            // 流式阶段已把原文写屏，收尾时清掉该块并渲染成 markdown
+            if (fullText) {
+                const rawLines = fullText.split('\n').length;
+                if (rawLines > 0) process.stdout.write(`\x1b[${rawLines}A\x1b[J`);
+                const rendered = renderMarkdown(fullText);
+                process.stdout.write(rendered);
+                process.stdout.write('\n');
+            }
             break;
         }
 
-        console.log('  → 继续下一步...');
+        console.log(`  ${c.dim}→ 继续下一步...${c.reset}`);
     }
 
     if (step >= MAX_STEPS) {
-        console.log('\n[达到最大步数]');
+        console.log(`\n${c.yellow}[达到最大步数]${c.reset}`);
     }
 }

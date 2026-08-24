@@ -6,6 +6,8 @@
 
 RuneClaw 是一个基于 TypeScript 的本地 AI Agent CLI。它把模型调用、文件工具、RAG、记忆、MCP、子 Agent、定时任务、插件和飞书通道放在同一个运行时里，适合做可迭代的个人 Agent 实验。
 
+![alt text](./assets/image.png)
+
 ## 特性
 
 - DeepSeek 兼容模型接入，默认使用 `deepseek-v4-flash`
@@ -13,7 +15,7 @@ RuneClaw 是一个基于 TypeScript 的本地 AI Agent CLI。它把模型调用�
 - 本地文件工具：读取、写入、编辑、列目录、grep、glob
 - Shell 工具：可执行命令并返回输出
 - 记忆系统：跨会话保存、读取、搜索记忆
-- RAG 知识库：自动导入 `docs/`，也支持手动导入其它文档
+- RAG 知识库：启动时加 `--rag` 自动导入 `docs/`，也支持手动导入其它文档
 - MCP 接入：可挂载外部工具，当前默认有 GitHub mock 示例
 - 子 Agent：支持任务分发与执行记录查看
 - 定时任务：支持查看任务与执行日志
@@ -28,23 +30,81 @@ RuneClaw 是一个基于 TypeScript 的本地 AI Agent CLI。它把模型调用�
 
 ```bash
 pnpm install
+pnpm build          # 编译到 dist/（bin 指向 dist/index.js）
 ```
+
+开发时直接跑源码、不用每次编译：
+
+```bash
+pnpm run dev        # 等价于 tsx src/index.ts
+```
+
+把 `runeclaw` 注册成全局命令（二选一）：
+
+```bash
+# 方式一：全局安装（推荐，任意目录都能用）
+pnpm add -g .
+
+# 方式二：开发时链接本地项目
+pnpm link --global
+```
+
+> 不想注册全局命令的话，也可以用 `pnpm exec runeclaw` 直接运行。
+> 修改源码后重新执行 `pnpm build` 即可让全局命令生效。
 
 ## 快速开始
 
 首次运行建议先初始化配置：
 
 ```bash
-pnpm init
+runeclaw init
 ```
 
 然后启动：
 
 ```bash
-pnpm start
+runeclaw
 ```
 
 如果你已经有完整的配置文件，也可以直接启动。
+
+`runeclaw` 支持以下命令：
+
+| 命令                             | 说明                                                  |
+| -------------------------------- | ----------------------------------------------------- |
+| `runeclaw` / `runeclaw start`    | 启动交互式 Agent（默认）                              |
+| `runeclaw init`                  | 运行初始化向导，生成 `runeclaw.config.json` 与 `.env` |
+| `runeclaw continue`              | 启动 Agent（预留会话续接）                            |
+| `runeclaw help` / `--help`       | 查看帮助                                              |
+| `runeclaw version` / `--version` | 查看版本号                                            |
+
+## 发布到 npm
+
+包名是 `@xiaodye/runeclaw`，`publishConfig.access: public` 已配置好（scoped 包默认私有，必须显式公开）。
+
+一键发布（`scripts/release.mjs` 自动完成：**版本号 +1 → 官方源发布 → 输出结果**）：
+
+```bash
+pnpm run release           # 默认补丁号 +1（1.0.0 → 1.0.1）
+pnpm run release -- minor  # 次版本号 +1（1.0.0 → 1.1.0）
+pnpm run release -- major  # 主版本号 +1（1.0.0 → 2.0.0）
+```
+
+> 说明：
+>
+> - 发布用 `npm publish --registry https://registry.npmjs.org/`，命令行参数优先级最高，能覆盖任何 `.npmrc` 里的镜像源配置（镜像源只读，无法发布），也无需改动全局 npm 配置；
+> - `npm publish` 的 `prepublishOnly` 会自动执行 `pnpm build`，无需手动构建；
+> - 首次发布前需要先 `npm login`。
+
+发布后其他人可以这样安装使用：
+
+```bash
+npm install -g @xiaodye/runeclaw
+runeclaw init
+runeclaw
+```
+
+> 发布包只包含 `dist/`（`files` 字段已限制），不会带源码、`.env`、知识库等运行时数据；用户安装后在自己的目录里运行 `runeclaw init` 生成配置。
 
 ## 配置说明
 
@@ -79,7 +139,7 @@ SERPER_API_KEY=
 
 ### 模型选择
 
-`pnpm init` 会默认提供这些 DeepSeek 模型：
+`runeclaw init` 会默认提供这些 DeepSeek 模型：
 
 - `deepseek-v4-flash`
 - `deepseek-v4-pro`
@@ -165,7 +225,7 @@ src/
 
 ## 说明
 
-- 启动时会自动导入 `docs/` 下的 `.md` 文档到知识库
+- 启动时默认**不**自动导入知识库；加 `--rag`（或 `pnpm start:rag`）才会导入 `docs/` 下的 `.md` 文档
 - 当前项目里的飞书配置只应通过 `.env` 提供，不要把 secret 写进 `runeclaw.config.json`
 - Web 搜索工具会优先使用 `TAVILY_API_KEY`，没有时可用 `SERPER_API_KEY`
 
