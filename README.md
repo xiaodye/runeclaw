@@ -6,6 +6,8 @@
 
 RuneClaw 是一个基于 TypeScript 的本地 AI Agent CLI。它把模型调用、文件工具、RAG、记忆、MCP、子 Agent、定时任务、插件和飞书通道放在同一个运行时里，适合做可迭代的个人 Agent 实验。
 
+![alt text](./assets/image.png)
+
 ## 特性
 
 - DeepSeek 兼容模型接入，默认使用 `deepseek-v4-flash`
@@ -68,13 +70,13 @@ runeclaw
 
 `runeclaw` 支持以下命令：
 
-| 命令 | 说明 |
-| --- | --- |
-| `runeclaw` / `runeclaw start` | 启动交互式 Agent（默认） |
-| `runeclaw init` | 运行初始化向导，生成 `runeclaw.config.json` 与 `.env` |
-| `runeclaw continue` | 启动 Agent（预留会话续接） |
-| `runeclaw help` / `--help` | 查看帮助 |
-| `runeclaw version` / `--version` | 查看版本号 |
+| 命令                             | 说明                                                  |
+| -------------------------------- | ----------------------------------------------------- |
+| `runeclaw` / `runeclaw start`    | 启动交互式 Agent（默认）                              |
+| `runeclaw init`                  | 运行初始化向导，生成 `runeclaw.config.json` 与 `.env` |
+| `runeclaw continue`              | 启动 Agent（预留会话续接）                            |
+| `runeclaw help` / `--help`       | 查看帮助                                              |
+| `runeclaw version` / `--version` | 查看版本号                                            |
 
 ## 发布到 npm
 
@@ -89,6 +91,7 @@ pnpm run release -- major  # 主版本号 +1（1.0.0 → 2.0.0）
 ```
 
 > 说明：
+>
 > - 发布用 `npm publish --registry https://registry.npmjs.org/`，命令行参数优先级最高，能覆盖任何 `.npmrc` 里的镜像源配置（镜像源只读，无法发布），也无需改动全局 npm 配置；
 > - `npm publish` 的 `prepublishOnly` 会自动执行 `pnpm build`，无需手动构建；
 > - 首次发布前需要先 `npm login`。
