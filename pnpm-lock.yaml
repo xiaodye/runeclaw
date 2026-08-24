@@ -75,6 +75,9 @@ importers:
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
+      esbuild:
+        specifier: ^0.28.1
+        version: 0.28.1
       json-schema-typed:
         specifier: ^8.0.2
         version: 8.0.2
