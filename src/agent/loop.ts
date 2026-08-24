@@ -9,6 +9,7 @@ import {
     COMPACT_TOKEN_THRESHOLD,
 } from '../context/defense.js';
 import { c } from '../ui/theme';
+import { renderMarkdown } from '../ui/markdown';
 
 const MAX_STEPS = 15;
 const MAX_RETRIES = 3;
@@ -162,7 +163,14 @@ export async function agentLoop(
         }
 
         if (!hasToolCall) {
-            if (fullText) console.log();
+            // 流式阶段已把原文写屏，收尾时清掉该块并渲染成 markdown
+            if (fullText) {
+                const rawLines = fullText.split('\n').length;
+                if (rawLines > 0) process.stdout.write(`\x1b[${rawLines}A\x1b[J`);
+                const rendered = renderMarkdown(fullText);
+                process.stdout.write(rendered);
+                process.stdout.write('\n');
+            }
             break;
         }
 
