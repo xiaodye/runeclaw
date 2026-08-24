@@ -273,12 +273,17 @@ export async function startAgent() {
     function ask() {
         rl.question(`\n${c.cyan}❯${c.reset} `, async (input) => {
             const trimmed = input.trim();
-            if (!trimmed || trimmed === 'exit') {
+            if (trimmed === '/exit') {
                 console.log('Bye!');
                 cronService.stop();
                 await gateway.stopAll();
                 await pluginManager.unloadAll();
                 rl.close();
+                // 强制退出：即使仍有 feishu/MCP/插件等句柄挂着事件循环，也要释放终端
+                process.exit(0);
+            }
+            if (!trimmed) {
+                ask();
                 return;
             }
 
@@ -332,7 +337,7 @@ export async function startAgent() {
             `  ${c.cyan}directory:${c.reset} ${c.bold}${process.cwd()}${c.reset}`,
             `  ${c.cyan}role:${c.reset}      ${c.yellow}${role}${c.reset} · 可用工具: ${c.green}${toolCount}${c.reset} 个`,
             '',
-            `  ${c.dim}Sub-Agent 深度 ${agentRegistry.getConfig().maxSpawnDepth} / 并发 ${agentRegistry.getConfig().maxConcurrent} · exit 退出 · /help 命令${c.reset}`,
+            `  ${c.dim}Sub-Agent 深度 ${agentRegistry.getConfig().maxSpawnDepth} / 并发 ${agentRegistry.getConfig().maxConcurrent} · /exit 退出 · /help 命令${c.reset}`,
         ].join('\n'),
         {
             title: 'RuneClaw',

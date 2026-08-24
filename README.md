@@ -1,12 +1,8 @@
-<p align="center">
-  <img src="./assets/runeclaw-logo.svg" alt="RuneClaw logo" width="720" />
-</p>
-
 # RuneClaw
 
 RuneClaw 是一个基于 TypeScript 的本地 AI Agent CLI。它把模型调用、文件工具、RAG、记忆、MCP、子 Agent、定时任务、插件和飞书通道放在同一个运行时里，适合做可迭代的个人 Agent 实验。
 
-![alt text](./assets/image.png)
+<img width="1688" height="1070" alt="image" src="https://github.com/user-attachments/assets/2f999223-5e7f-4f7d-aabd-c6b78cc8087a" />
 
 ## 特性
 
@@ -153,7 +149,7 @@ SERPER_API_KEY=
 
 ### 基础
 
-- `exit` 退出
+- `/exit` 退出
 - `/context` 查看上下文占用
 - `/usage` 查看 token 和成本统计
 - `status` 查看当前消息、记忆和知识库状态
