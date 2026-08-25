@@ -7,6 +7,8 @@ export interface IncomingMessage {
     senderName: string;
     /** 已归一化为纯文本的用户输入内容。 */
     text: string;
+    /** 平台原始消息 ID，用于消息级操作（如表情回应）。 */
+    messageId?: string;
     /** 通道原始事件数据，便于排查平台侧字段差异。 */
     raw?: unknown;
 }
@@ -18,6 +20,8 @@ export interface OutgoingMessage {
     recipientId: string;
     /** 待发送到通道的纯文本回复。 */
     text: string;
+    /** 平台原始消息 ID，用于关联回复与表情回应清理。 */
+    messageId?: string;
 }
 
 export interface ChannelDefinition {

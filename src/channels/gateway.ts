@@ -113,6 +113,7 @@ export class ChannelGateway {
                     channelId: msg.channelId,
                     recipientId: msg.senderId,
                     text: replyText,
+                    messageId: msg.messageId,
                 };
                 await channel.send(outgoing);
                 console.log(
