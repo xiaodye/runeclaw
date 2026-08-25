@@ -1,5 +1,8 @@
 import type { ChannelDefinition, IncomingMessage, OutgoingMessage } from './types.js';
 
+/** 收到用户消息时先添加的表情回应（飞书 emoji_type 代码，用作「稍等」提示）。 常见：Typing，Get */
+const WAIT_REACTION_EMOJI = 'Typing';
+
 interface FeishuConfig {
     /** 飞书应用的 App ID，缺失时仅启动本地 Dashboard。 */
     appId: string;
@@ -28,6 +31,8 @@ export class FeishuChannel implements ChannelDefinition {
     private wsClient?: any;
     /** 飞书开放平台 API 客户端实例，用于发送回复。 */
     private larkClient?: any;
+    /** 消息 ID → 已添加的「稍等」表情回应 ID，完成回复后据此清除。 */
+    private reactions = new Map<string, string>();
 
     /**
      * 创建飞书通道实例并保存运行配置。
@@ -84,11 +89,15 @@ export class FeishuChannel implements ChannelDefinition {
                 }
 
                 if (text && this.messageHandler) {
+                    const messageId = data.message.message_id;
+                    // 先给用户消息添加「稍等」表情回应，处理完成后再清除
+                    if (messageId) this.addWaitingReaction(messageId);
                     this.messageHandler({
                         channelId: data.message.chat_id,
                         senderId: data.sender.sender_id?.open_id || 'unknown',
                         senderName: data.sender.sender_id?.open_id || 'unknown',
                         text,
+                        messageId,
                         raw: data,
                     });
                 }
@@ -124,17 +133,82 @@ export class FeishuChannel implements ChannelDefinition {
         }
 
         try {
-            await this.larkClient.im.message.create({
-                params: { receive_id_type: 'chat_id' },
-                data: {
-                    receive_id: message.channelId,
-                    msg_type: 'text',
-                    content: JSON.stringify({ text: message.text }),
-                },
-            });
+            if (message.messageId) {
+                // 用 lark_md 卡片回复特定消息：内联 markdown（加粗/斜体/行内代码）可正常渲染，并引用原消息
+                const card = {
+                    config: { wide_screen_mode: true },
+                    elements: [
+                        {
+                            tag: 'div',
+                            text: { tag: 'lark_md', content: message.text },
+                        },
+                    ],
+                };
+                await this.larkClient.im.message.reply({
+                    path: { message_id: message.messageId },
+                    data: {
+                        content: JSON.stringify(card),
+                        msg_type: 'interactive',
+                        reply_in_thread: false,
+                    },
+                });
+            } else {
+                // 无 messageId（如测试 webhook）时退回发新消息到会话
+                await this.larkClient.im.message.create({
+                    params: { receive_id_type: 'chat_id' },
+                    data: {
+                        receive_id: message.channelId,
+                        msg_type: 'text',
+                        content: JSON.stringify({ text: message.text }),
+                    },
+                });
+            }
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             console.error(`    [feishu] 发送失败: ${msg}`);
+        }
+
+        // 回复已发出，清除之前添加的「稍等」表情回应
+        if (message.messageId) await this.removeWaitingReaction(message.messageId);
+    }
+
+    /**
+     * 给指定消息添加「稍等」表情回应，并记录返回的回应 ID 以便后续清除。
+     *
+     * @param messageId 目标消息 ID。
+     */
+    private async addWaitingReaction(messageId: string): Promise<void> {
+        if (!this.larkClient) return;
+        try {
+            const res = await this.larkClient.im.messageReaction.create({
+                path: { message_id: messageId },
+                data: { reaction_type: { emoji_type: WAIT_REACTION_EMOJI } },
+            });
+            const reactionId = res.data?.reaction_id;
+            if (reactionId) this.reactions.set(messageId, reactionId);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`    [feishu] 添加「稍等」表情失败: ${msg}`);
+        }
+    }
+
+    /**
+     * 删除指定消息上的「稍等」表情回应（回复发送完成时调用）。
+     *
+     * @param messageId 目标消息 ID。
+     */
+    private async removeWaitingReaction(messageId: string): Promise<void> {
+        const reactionId = this.reactions.get(messageId);
+        if (!this.larkClient || !reactionId) return;
+        try {
+            await this.larkClient.im.messageReaction.delete({
+                path: { message_id: messageId, reaction_id: reactionId },
+            });
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`    [feishu] 清除「稍等」表情失败: ${msg}`);
+        } finally {
+            this.reactions.delete(messageId);
         }
     }
 
