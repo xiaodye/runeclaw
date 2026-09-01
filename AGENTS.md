@@ -1,64 +1,47 @@
-# Project Instructions
+# Repository Guidelines
 
-### Documentation Lookup
+## 项目结构与模块划分
 
-Use the `find-docs` skill whenever the user asks about a library, framework, SDK, API, CLI tool, or cloud service, even well-known ones like React, Next.js, Prisma, Express, Tailwind, Django, or Spring Boot. This includes API syntax, configuration, version migration, library-specific debugging, setup instructions, and CLI tool usage. Use even when the answer seems familiar, because local knowledge may be stale. Prefer it over web search for library docs.
+RuneClaw 是基于 TypeScript 和 Node.js 的本地 AI Agent CLI。
 
-Do not use it for refactoring, writing scripts from scratch, debugging business logic, code review, or general programming concepts.
+- `src/index.ts` 是 CLI 入口，`src/main.ts` 是组合根；核心循环、工具系统和上下文管理分别位于 `src/agent/`、`src/tools/`、`src/context/`。
+- `src/rag/` 负责 SQLite 向量与全文检索，`src/memory/`、`src/session/`、`src/cron/` 分别负责记忆、会话和定时任务。
+- Channel、配置和终端 UI 分别位于 `src/channels/`、`src/config/`、`src/ui/`；构建脚本和静态资源位于 `scripts/`、`assets/`。
+- `docs/` 主要是 RAG 测试资料，不是项目设计文档。
 
-The skill drives the Context7 CLI (`npx ctx7@latest`). Two steps:
+## 构建、测试与开发命令
 
-1. Resolve the library name to an ID: `npx ctx7@latest library <name> "<query>"` — skip only if the user provides an exact library ID in `/org/project[/version]` format.
-2. Query docs with that ID: `npx ctx7@latest docs <libraryId> "<query>"`.
+- `pnpm install`：安装依赖；要求 Node.js 22+、pnpm 10.x。
+- `pnpm dev`：通过 `tsx` 直接运行源码，日常开发优先使用。
+- `pnpm build`：使用 esbuild 将入口打包为可执行的 `dist/index.js`。
+- `pnpm start`：运行构建产物；首次使用前执行 `pnpm init` 生成配置。
+- `pnpm start:rag`：启动时自动导入 `docs/*.md`。
 
-Pick the best match by exact name match, description relevance, code snippet count, source reputation, and benchmark score; if results look wrong, try alternate names or rephrased queries. Keep queries descriptive and one-topic, never include secrets, and cap at 3 attempts per question before falling back to the best result you have.
+## 测试要求
 
-### TypeScript TSDoc
+- 仓库目前没有可用的测试 runner 或覆盖率门槛，`src/context/defense.spec.ts` 尚未接入测试脚本。提交前至少执行 `pnpm build`，并手动验证受影响的 CLI 命令或 Channel 流程。
+- 后续接入测试后，默认只运行与改动相关的测试；除非用户明确要求，否则不要运行耗时的全量测试。
 
-When adding or changing TypeScript/TSX code, follow `.agent/skills/add-tsdoc-comments/SKILL.md` and add concise **Chinese** TSDoc for newly introduced or materially changed functions, methods, class members, interface fields, and object-like type members.
+## 编码风格与命名
 
-## Commands
+- TypeScript 使用四空格缩进、单引号和分号，并遵循相邻文件的写法；导入路径是否带 `.js` 以当前文件风格为准。
+- 类和类型使用 PascalCase，函数与变量使用 camelCase，文件名使用 kebab-case。
+- 新增或实质修改函数、方法、类成员、接口字段及对象类型成员时，遵循 `.agent/skills/add-tsdoc-comments/SKILL.md`，添加简洁的中文 TSDoc。
 
-- `pnpm dev` — run from source via `tsx src/index.ts` (no compile step; preferred for development)
-- `pnpm build` — bundle `src/index.ts` → `dist/index.js` via esbuild (deps stay external; injects shebang + sets exec bit). `bin` points at `dist/index.js`
-- `pnpm start` — run the built `dist/index.js`
-- `pnpm init` — run the interactive config wizard (generates `runeclaw.config.json` + `.env`)
-- `pnpm start:rag` / `runeclaw --rag` — start with auto-import of `docs/*.md` into the RAG store
-- `pnpm release [-- minor | major]` — bump version + publish `@xiaodye/runeclaw` to the npm registry (`scripts/release.mjs`)
+## 提交与 Pull Request
 
-There is **no test runner configured** — no test script or framework dependency. (`src/context/defense.spec.ts` is a stray spec with no harness.) Node 22+ / pnpm 10.x is required.
+- 提交标题沿用简短的 Conventional Commit 风格，例如 `feat: AI 工作流`、`fix: 修复会话恢复`；一次提交只处理一个主题。
+- PR 应说明行为变化、验证命令和潜在影响，有关联 Issue 时应链接。
+- CLI 或终端 UI 有可见变化时附截图；Web UI 改动必须截图自查暗色模式和窄屏布局，确认视觉无误后再报告完成。
 
-## Architecture
+## 安全与配置
 
-RuneClaw is a local AI-agent CLI. The runtime is composed from a single entry point, then wired together in one composition root.
+- 密钥只能放入 `.env`，`runeclaw.config.json` 仅保留 `${VAR}` 占位符。
+- 不要提交 API Key、`.sessions/`、`.memory/`、`.cron/`、`.usage/`、`knowledge.db` 等本地运行数据。
+- 涉及 Shell 工具、权限或 Hook 的改动必须检查输入边界和危险命令处理。
 
-### Entry → composition root → loop
+## Agent 专用说明
 
-- `src/index.ts` — CLI entry; parses the subcommand (`init` / `start` / `continue` / `help` / `version` / `--rag`) and lazy-imports the target module.
-- `src/main.ts` — the **composition root**. Constructs every service and wires them together: loads config, builds the OpenAI-compatible provider (`@ai-sdk/openai` → DeepSeek), registers tools, and starts memory, RAG, skills, plugins, the Feishu channel, cron, sub-agents, hooks, and the command dispatcher. `startAgent()` then runs the readline REPL. This file is the map for how anything fits together.
-- `src/agent/loop.ts` — the core loop. Uses `streamText` from the `ai` SDK (`@ai-sdk/*`), streams text + tool calls, and drives retries (`retry.ts`), loop detection (`loop-detection.ts`), and context compression (`../context/defense.js`). Hard limits: `MAX_STEPS = 15`, `MAX_RETRIES = 3`, `TOKEN_BUDGET = 150_000`.
-
-### Central abstractions
-
-- `src/tools/registry.ts` — `ToolRegistry` is the heart of tool execution. Tools are `ToolDefinition`s with `name` / `description` / `parameters` (JSON Schema) / `execute`. `register()` adds them; `toAISDKFormat()` converts them to AI-SDK tools while adding: bash risk classification (`security/bash-classifier.ts`), pre/post hook execution, a concurrency lock (exclusive vs. concurrency-safe tools), and result truncation (`truncateResult`). Tools with `shouldDefer: true` are hidden until discovered via the `tool_search` tool; MCP tools are registered prefixed as `mcp__<server>__<name>`.
-- `src/context/prompt-builder.ts` — `PromptBuilder` composes the system prompt as an ordered `.pipe(name, fn)` chain; `build(ctx)` joins the non-null sections. Wired in `main.ts` with `coreRules` → `toolGuide` → `deferredTools` → `memoryContext` → `ragContext` → `skillContext` → `sessionContext`. Add prompt sections by adding a pipe here.
-- `src/config/` — `schema.ts` defines `SuperAgentConfigSchema` (zod); `loader.ts` reads `runeclaw.config.json` and substitutes `${VAR}` placeholders from environment variables (loaded via `dotenv/config`).
-
-### Subsystems (one directory each)
-
-- `src/tools/` — built-in tools (file, shell, search, web-search, memory, rag, cron, spawn) + MCP client/adapters.
-- `src/rag/` — SQLite vector store (`sqlite-store.ts`, using `sqlite-vec` on `knowledge.db`), DashScope embedder (`embedder.ts`), chunker, and search.
-- `src/memory/`, `src/session/`, `src/cron/` — persistence layers (memory store, session JSONL, cron jobs/logs).
-- `src/security/` — RBAC roles (`roles.ts`), pre/post `hooks.ts`, and `bash-classifier.ts` for dangerous-command detection.
-- `src/channels/` — the Feishu/Lark channel (Hono server on port 3000), registered through `ChannelGateway`.
-- `src/commands/` — slash commands, combined via `createDispatcher([...])` into the REPL.
-- `src/agents/`, `src/skills/`, `src/plugins/`, `src/mcp/`, `src/ui/`, `src/usage/` — sub-agent spawning, skill loading, plugin management, MCP, terminal UI (Ink/markdown), and usage/cost tracking.
-
-## Conventions
-
-- **Secrets go in `.env`, never in `runeclaw.config.json`.** The config file holds only `${LLM_API_KEY}`-style placeholders that `loadConfig` substitutes at startup.
-- **Import specifiers are inconsistent** — some files use extensionless imports (`./tools/registry`) and others use `.js` (`./mcp-client.js`). esbuild resolves both at build time and tsx at dev time; match the style of the surrounding file.
-- `docs/` is **RAG test data**, not real project docs (its `api-design.md` / `deployment-guide.md` describe a fictional Postgres/PM2 setup). Runtime data (`.cron/`, `.sessions/`, `.memory/`, `.usage/`, `knowledge.db`) is gitignored/local.
-- Commit messages and code comments are written in Chinese.
-- 用最简单的方式实现，不要考虑本次需求之外的扩展性，能用现有依赖就不要造轮子。
-- WEB UI 相关的改动，完成后必须打开页面截图自查，覆盖暗色模式和窄屏，确认视觉无误再报告完成。
+- 回答框架、SDK、API 或 CLI 工具相关问题时，先使用项目配置的 `find-docs`/Context7 流程查询当前文档。
+- 修改代码时保持范围最小，不覆盖用户已有改动；使用满足当前需求的最简单实现，不为范围外需求预留扩展，能复用现有依赖时不要重复造轮子。
+- 新增测试基础设施前先确认确有必要。
