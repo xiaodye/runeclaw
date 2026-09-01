@@ -27,7 +27,9 @@ const HELP_TEXT = `RuneClaw — 本地 AI Agent 运行时
  */
 function readVersion(): string {
     try {
-        const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8')) as {
+        const pkg = JSON.parse(
+            readFileSync(new URL('../package.json', import.meta.url), 'utf-8'),
+        ) as {
             version?: string;
         };
         return pkg.version ?? '0.0.0';

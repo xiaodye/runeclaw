@@ -130,9 +130,7 @@ export class SkillLoader {
      * @param raw 原始 Markdown 文件内容。
      * @returns
      */
-    private parseFrontmatter(
-        raw: string,
-    ): {
+    private parseFrontmatter(raw: string): {
         /** skill 描述，缺省为空字符串。 */
         description: string;
         /** 可选适用场景提示。 */

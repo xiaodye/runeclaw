@@ -162,13 +162,21 @@ interface EnvEntry {
 function buildEnvContent(answers: Answers): string {
     const entries: EnvEntry[] = [
         { comment: '模型名称（DeepSeek）', key: 'LLM_MODEL', value: answers.model },
-        { comment: '模型 API 基础地址（OpenAI 兼容）', key: 'LLM_API_BASE', value: answers.baseURL },
+        {
+            comment: '模型 API 基础地址（OpenAI 兼容）',
+            key: 'LLM_API_BASE',
+            value: answers.baseURL,
+        },
         { comment: '模型 API Key', key: 'LLM_API_KEY', value: answers.apiKey },
     ];
     if (answers.enableFeishu && answers.feishuAppId) {
         entries.push(
             { comment: '飞书机器人 App ID', key: 'FEISHU_APP_ID', value: answers.feishuAppId },
-            { comment: '飞书机器人 App Secret', key: 'FEISHU_APP_SECRET', value: answers.feishuAppSecret },
+            {
+                comment: '飞书机器人 App Secret',
+                key: 'FEISHU_APP_SECRET',
+                value: answers.feishuAppSecret,
+            },
         );
     }
     if (answers.dashscopeKey) {
@@ -178,7 +186,10 @@ function buildEnvContent(answers: Answers): string {
             value: answers.dashscopeKey,
         });
     }
-    return entries.map((entry) => `# ${entry.comment}\n${entry.key}=${entry.value}`).join('\n\n') + '\n';
+    return (
+        entries.map((entry) => `# ${entry.comment}\n${entry.key}=${entry.value}`).join('\n\n') +
+        '\n'
+    );
 }
 
 /**
@@ -193,7 +204,11 @@ function writeFiles(answers: Answers): void {
 }
 
 /** 表单字段的外壳：渲染标签、可选说明以及下方内容区。 */
-function FieldShell(props: { label: string; description?: string; children: ReactNode }): ReactElement {
+function FieldShell(props: {
+    label: string;
+    description?: string;
+    children: ReactNode;
+}): ReactElement {
     return (
         <Box flexDirection="column">
             <Text bold color="white">
@@ -292,7 +307,11 @@ function HintBar(props: { phase: Phase }): ReactElement {
     if (phase === 'overwrite' || phase === 'feishu' || phase === 'review') {
         hint = 'Y/N 选择 · Enter 使用默认 · Ctrl+C 退出';
     }
-    return <Text dimColor color="gray">{hint}</Text>;
+    return (
+        <Text dimColor color="gray">
+            {hint}
+        </Text>
+    );
 }
 
 /** 展示已填写内容的复核摘要，密钥只显示「已填写 / 留空」。 */
@@ -309,7 +328,10 @@ function ReviewList(props: { answers: Answers }): ReactElement {
                   ['飞书 App Secret', answers.feishuAppSecret ? '（已填写）' : '（留空）'],
               ] as Array<[string, string]>)
             : []),
-        ['DashScope Key (向量化)', answers.dashscopeKey ? '（已填写）' : '（留空，使用本地 mock 向量化）'],
+        [
+            'DashScope Key (向量化)',
+            answers.dashscopeKey ? '（已填写）' : '（留空，使用本地 mock 向量化）',
+        ],
         ['子 Agent 并发数', answers.maxConcurrent || '3'],
     ];
     return (
@@ -484,7 +506,9 @@ export function InitWizard(): ReactElement {
                     description="取值范围 1-10"
                     placeholder="3"
                     value={answers.maxConcurrent}
-                    onChange={(v) => setAnswers((a) => ({ ...a, maxConcurrent: v.replace(/\D/g, '') }))}
+                    onChange={(v) =>
+                        setAnswers((a) => ({ ...a, maxConcurrent: v.replace(/\D/g, '') }))
+                    }
                     onSubmit={() => {
                         const n = parseInt(answers.maxConcurrent, 10);
                         const clamped = Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 3;

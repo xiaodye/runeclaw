@@ -1,0 +1,8 @@
+dist/
+node_modules/
+build-web/
+.sessions/
+.memory/
+.cron/
+.usage/
+knowledge.db
