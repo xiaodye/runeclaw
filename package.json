@@ -1,6 +1,6 @@
 {
     "name": "@xiaodye/runeclaw",
-    "version": "1.0.5",
+    "version": "1.0.7",
     "description": "Local AI agent runtime for tools, memory, RAG, sub-agents, plugins, cron jobs, and channels.",
     "main": "dist/index.js",
     "type": "module",
@@ -17,6 +17,10 @@
     "scripts": {
         "dev": "tsx src/index.ts",
         "build": "node scripts/build.mjs",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write \"src/**/*.{ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"*.{json,mjs}\" .prettierrc",
+        "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"*.{json,mjs}\" .prettierrc",
         "start": "node dist/index.js",
         "init": "node dist/index.js init",
         "continue": "node dist/index.js --continue",
@@ -33,7 +37,7 @@
         "automation"
     ],
     "author": "xiaodye",
-    "license": "ISC",
+    "license": "MIT",
     "packageManager": "pnpm@10.17.0",
     "publishConfig": {
         "access": "public"
@@ -60,6 +64,7 @@
         "zod": "^3.25.76"
     },
     "devDependencies": {
+        "@eslint/js": "^10.0.1",
         "@midscene/cli": "^1.12.2",
         "@midscene/web": "^1.12.2",
         "@playwright/test": "^1.62.1",
@@ -70,9 +75,12 @@
         "@types/turndown": "^5.0.6",
         "ajv": "^8.20.0",
         "esbuild": "^0.28.1",
+        "eslint": "^10.9.1",
+        "eslint-config-prettier": "^10.1.8",
         "json-schema-typed": "^8.0.2",
         "prettier": "^3.9.6",
         "tsx": "^4.22.4",
-        "typescript": "^6.0.3"
+        "typescript": "^6.0.3",
+        "typescript-eslint": "^8.69.0"
     }
 }

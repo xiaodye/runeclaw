@@ -14,6 +14,8 @@ RuneClaw 是基于 TypeScript 和 Node.js 的本地 AI Agent CLI。
 - `pnpm install`：安装依赖；要求 Node.js 22+、pnpm 10.x。
 - `pnpm dev`：通过 `tsx` 直接运行源码，日常开发优先使用。
 - `pnpm build`：使用 esbuild 将入口打包为可执行的 `dist/index.js`。
+- `pnpm lint` / `pnpm lint:fix`：检查或自动修复 ESLint 问题。
+- `pnpm format` / `pnpm format:check`：格式化或检查源码、脚本和根配置文件。
 - `pnpm start`：运行构建产物；首次使用前执行 `pnpm init` 生成配置。
 - `pnpm start:rag`：启动时自动导入 `docs/*.md`。
 

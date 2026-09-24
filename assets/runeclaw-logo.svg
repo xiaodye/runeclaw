@@ -1,19 +1,49 @@
 <svg width="960" height="320" viewBox="0 0 960 320" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">RuneClaw logo</title>
-  <desc id="desc">A rune-like claw mark surrounding an agent core node, with the RuneClaw wordmark.</desc>
-  <rect width="960" height="320" rx="40" fill="#0B1020"/>
-  <g transform="translate(64 44)">
-    <path d="M104 8L184 56V152L104 200L24 152V56L104 8Z" fill="#101A32" stroke="#38BDF8" stroke-width="6" stroke-linejoin="round"/>
-    <path d="M104 52V158" stroke="#E5E7EB" stroke-width="10" stroke-linecap="round"/>
-    <path d="M64 82H144" stroke="#E5E7EB" stroke-width="10" stroke-linecap="round"/>
-    <path d="M76 126L132 70" stroke="#22C55E" stroke-width="10" stroke-linecap="round"/>
-    <circle cx="104" cy="104" r="18" fill="#F59E0B"/>
-    <path d="M188 34C226 74 230 137 195 181" stroke="#38BDF8" stroke-width="12" stroke-linecap="round"/>
-    <path d="M219 55C250 100 248 153 215 199" stroke="#22C55E" stroke-width="12" stroke-linecap="round"/>
-    <path d="M248 84C268 121 263 164 235 199" stroke="#F59E0B" stroke-width="12" stroke-linecap="round"/>
+  <desc id="desc">Three tapered claw slashes crossing a carved rune ring, with the RuneClaw wordmark.</desc>
+
+  <defs>
+    <linearGradient id="grad-ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#818CF8"/>
+      <stop offset="0.55" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="grad-claw" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#A5B4FC"/>
+      <stop offset="0.5" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="grad-text" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#0EA5E9"/>
+    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- rune ring: segmented outer ring -->
+  <circle cx="160" cy="160" r="104" stroke="url(#grad-ring)" stroke-width="10"
+          stroke-linecap="round" stroke-dasharray="141 22" opacity="0.95"/>
+  <!-- inner carved ring -->
+  <circle cx="160" cy="160" r="78" stroke="url(#grad-ring)" stroke-width="3"
+          stroke-dasharray="4 12" opacity="0.5"/>
+
+  <!-- claw slashes -->
+  <g filter="url(#glow)" stroke="url(#grad-claw)" stroke-linecap="round" fill="none">
+    <path d="M96 60 C 118 118 132 186 136 252" stroke-width="12"/>
+    <path d="M140 42 C 166 108 182 184 188 258" stroke-width="19"/>
+    <path d="M188 38 C 212 100 228 172 234 244" stroke-width="12"/>
   </g>
-  <g transform="translate(344 92)">
-    <text x="0" y="72" fill="#F8FAFC" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="72" font-weight="800" letter-spacing="0">RuneClaw</text>
-    <text x="4" y="122" fill="#94A3B8" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="500" letter-spacing="0">local agent runtime for tools, memory, RAG and channels</text>
-  </g>
+
+  <!-- wordmark -->
+  <text x="308" y="198" font-family="'SF Pro Display','Segoe UI',Helvetica,Arial,sans-serif"
+        font-size="110" font-weight="800" letter-spacing="-2" fill="url(#grad-text)">RuneClaw</text>
+  <!-- tagline -->
+  <text x="312" y="248" font-family="'SF Mono','JetBrains Mono',Menlo,Consolas,monospace"
+        font-size="24" font-weight="500" letter-spacing="9" fill="#94A3B8">LOCAL AI AGENT RUNTIME</text>
 </svg>

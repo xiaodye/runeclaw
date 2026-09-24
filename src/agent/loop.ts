@@ -11,7 +11,7 @@ import {
 import { c } from '../ui/theme';
 import { renderMarkdown } from '../ui/markdown';
 
-const MAX_STEPS = 15;
+const MAX_STEPS = 30;
 const MAX_RETRIES = 3;
 const TOKEN_BUDGET = 150_000;
 
@@ -102,7 +102,9 @@ export async function agentLoop(
                                     : JSON.stringify(part.output);
                             const preview =
                                 output.length > 120 ? output.slice(0, 120) + '...' : output;
-                            console.log(`  ${c.gray}↳ 结果 ${part.toolName}:${c.reset} ${c.dim}${preview}${c.reset}`);
+                            console.log(
+                                `  ${c.gray}↳ 结果 ${part.toolName}:${c.reset} ${c.dim}${preview}${c.reset}`,
+                            );
                             if (lastToolCall) {
                                 recordResult(lastToolCall.name, lastToolCall.input, part.output);
                             }
@@ -117,7 +119,9 @@ export async function agentLoop(
             } catch (error) {
                 if (attempt > MAX_RETRIES || !isRetryable(error as Error)) throw error;
                 const delay = calculateDelay(attempt);
-                console.log(`  ${c.yellow}⚠ [重试] 第 ${attempt}/${MAX_RETRIES} 次，${delay}ms 后...${c.reset}`);
+                console.log(
+                    `  ${c.yellow}⚠ [重试] 第 ${attempt}/${MAX_RETRIES} 次，${delay}ms 后...${c.reset}`,
+                );
                 await sleep(delay);
                 hasToolCall = false;
                 fullText = '';
@@ -147,12 +151,16 @@ export async function agentLoop(
                 norm.cacheReadTokens > 0
                     ? `read ${norm.cacheReadTokens}`
                     : `write ${norm.cacheWriteTokens}`;
-            console.log(`  [${tag}] ${c.dim}${detail} tokens · 本步 $${stepRecord.cost.toFixed(5)}${c.reset}`);
+            console.log(
+                `  [${tag}] ${c.dim}${detail} tokens · 本步 $${stepRecord.cost.toFixed(5)}${c.reset}`,
+            );
         }
 
         // 上下文超过窗口预算时：TTL 清理后仍超则 LLM 摘要压缩
         if (estimateMessageTokens(messages) > COMPACT_TOKEN_THRESHOLD) {
-            console.log(`  ${c.yellow}[Token] ~${estimateMessageTokens(messages)} 超预算，触发压缩...${c.reset}`);
+            console.log(
+                `  ${c.yellow}[Token] ~${estimateMessageTokens(messages)} 超预算，触发压缩...${c.reset}`,
+            );
             const compacted = await compactContext(model, messages, timestamps);
             messages.splice(0, messages.length, ...compacted.messages);
             timestamps.clear();
