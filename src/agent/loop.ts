@@ -11,7 +11,7 @@ import {
 import { c } from '../ui/theme';
 import { renderMarkdown } from '../ui/markdown';
 
-const MAX_STEPS = 15;
+const MAX_STEPS = 30;
 const MAX_RETRIES = 3;
 const TOKEN_BUDGET = 150_000;
 
