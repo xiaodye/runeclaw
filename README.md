@@ -8,13 +8,15 @@
 
 模型调用 · 文件工具 · RAG · 记忆 · MCP · 子 Agent · 定时任务 · 插件 · 飞书通道
 
+[![npm version](https://img.shields.io/npm/v/%40xiaodye/runeclaw?color=cb3837&label=npm)](https://www.npmjs.com/package/@xiaodye/runeclaw)
+[![license](https://img.shields.io/badge/license-MIT-yellow)](#许可证)
+
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Node.js 22+](https://img.shields.io/badge/Node.js%2022%2B-5FA04E?style=flat&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-10.x-F69220?style=flat&logo=pnpm&logoColor=white)](https://pnpm.io)
 [![React Ink](https://img.shields.io/badge/React%20Ink-61DAFB?style=flat&logo=react&logoColor=black)](https://github.com/vadimdemedes/ink)
 [![Vercel AI SDK](https://img.shields.io/badge/Vercel%20AI%20SDK-000000?style=flat&logo=vercel&logoColor=white)](https://ai-sdk.dev)
 [![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat&logo=sqlite&logoColor=white)](https://sqlite.org)
-[![license](https://img.shields.io/badge/license-MIT-yellow)](#许可证)
 
 </div>
 
