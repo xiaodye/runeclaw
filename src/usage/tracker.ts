@@ -42,8 +42,6 @@ export const PRICE_TABLE: Record<string, ModelPricing> = {
     'qwen3-6-plus': { input: 0.4, output: 1.2, cacheWrite: 0.4, cacheRead: 0.04 },
     'kimi-k2-6': { input: 0.6, output: 2.5, cacheWrite: 0.6, cacheRead: 0.15 },
     'doubao-2-0-pro': { input: 0.3, output: 0.9, cacheWrite: 0.3, cacheRead: 0.12 },
-    // 课程内 mock，用 Haiku 4.5 同档价格
-    'mock-model': { input: 1.0, output: 5.0, cacheWrite: 1.25, cacheRead: 0.1 },
 };
 
 export interface StepUsage {
@@ -122,7 +120,8 @@ export class UsageTracker {
         const baselineCost = (() => {
             let c = 0;
             for (const s of this.steps) {
-                const p = PRICE_TABLE[s.model] || PRICE_TABLE['mock-model'];
+                const p = PRICE_TABLE[s.model];
+                if (!p) continue;
                 const inputLike = s.inputTokens + s.cacheReadTokens + s.cacheWriteTokens;
                 c += (inputLike * p.input) / 1_000_000;
                 c += (s.outputTokens * p.output) / 1_000_000;
@@ -150,14 +149,15 @@ export class UsageTracker {
 }
 
 /**
- * 根据模型价格表计算单次调用成本，未知模型使用 mock-model 价格兜底。
+ * 根据模型价格表计算单次调用成本，未知模型不估算费用，仅记录 token 用量。
  *
  * @param model 模型 id。
  * @param usage 规范化后的 token 用量。
  * @returns
  */
 export function computeCost(model: string, usage: StepUsage): number {
-    const p = PRICE_TABLE[model] || PRICE_TABLE['mock-model'];
+    const p = PRICE_TABLE[model];
+    if (!p) return 0;
     return (
         (usage.inputTokens * p.input +
             usage.outputTokens * p.output +

@@ -1,5 +1,5 @@
 import { jsonSchema } from 'ai';
-import type { MCPClient, MockMCPClient } from './mcp-client.js';
+import type { MCPClient } from './mcp-client.js';
 import type { HookPipeline } from '../security/hooks.js';
 import type { Role } from '../security/roles.js';
 import { canUseTool } from '../security/roles.js';
@@ -35,7 +35,7 @@ export class ToolRegistry {
     /** 当前注册的工具定义，按工具名索引。 */
     private tools = new Map<string, ToolDefinition>();
     /** 已连接的 MCP 客户端，用于统一关闭连接。 */
-    private mcpClients: Array<MCPClient | MockMCPClient> = [];
+    private mcpClients: MCPClient[] = [];
 
     /** 是否有排他工具正在执行。 */
     private exclusiveLock = false;
@@ -82,10 +82,7 @@ export class ToolRegistry {
      * @param client MCP 客户端实例。
      * @returns 本次实际注册的工具名称列表。
      */
-    async registerMCPServer(
-        serverName: string,
-        client: MCPClient | MockMCPClient,
-    ): Promise<string[]> {
+    async registerMCPServer(serverName: string, client: MCPClient): Promise<string[]> {
         await client.connect();
         this.mcpClients.push(client);
 

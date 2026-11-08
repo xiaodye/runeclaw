@@ -182,7 +182,7 @@ export function renderContextView(snapshot: ContextSnapshot): string {
 
 export interface BuildSnapshotInput {
     /** 面向用户展示的模型名称。 */
-    modelName: string; // "Mock Model" / "Qwen Plus" 等
+    modelName: string; // 当前实际使用的模型名称
     /** 模型的底层标识或 provider id。 */
     modelId: string;
     /** 模型上下文窗口容量。 */
