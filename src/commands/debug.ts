@@ -1,4 +1,3 @@
-import { setCacheEnabled } from '../mock-model.js';
 import { estimateMessageTokens, applyDefense } from '../context/defense.js';
 import type { CommandHandler } from './index.js';
 
@@ -76,12 +75,10 @@ export const debugCommands: CommandHandler[] = [
 
     (cmd) => {
         if (cmd === '/cache off' || cmd === 'cache off') {
-            setCacheEnabled(false);
             console.log('\n  已关闭 cache 模拟\n');
             return true;
         }
         if (cmd === '/cache on' || cmd === 'cache on') {
-            setCacheEnabled(true);
             console.log('\n  已开启 cache 模拟\n');
             return true;
         }

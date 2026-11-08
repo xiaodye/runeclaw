@@ -7,7 +7,6 @@ import { createInterface } from 'node:readline';
 import { allTools } from './tools';
 import { agentLoop } from './agent/loop';
 import { ToolDefinition, ToolRegistry } from './tools/registry';
-import { createMockModel, setCacheEnabled } from './mock-model';
 import { MCPClient, MockMCPClient } from './tools/mcp-client';
 import { SessionStore } from './session/store';
 import {
