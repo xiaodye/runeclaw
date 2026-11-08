@@ -36,7 +36,7 @@ RuneClaw 是一个基于 TypeScript 的本地 AI Agent CLI。它把模型调用�
 | 🐚 Shell 工具  | 执行命令并返回输出，带安全钩子与审计日志                     |
 | 🧠 记忆系统    | 跨会话保存、读取、搜索记忆                                   |
 | 📚 RAG 知识库  | SQLite 向量 + 全文检索，启动时加 `--rag` 自动导入 `docs/`    |
-| 🔌 MCP 接入    | 提供 MCP 工具注册能力，默认不连接外部服务                  |
+| 🔌 MCP 接入    | 官方 MCP SDK，支持 stdio / Streamable HTTP，按配置连接                  |
 | 🪆 子 Agent    | 任务分发与执行记录查看                                       |
 | ⏰ 定时任务    | 查看 cron 任务与执行日志                                     |
 | 🧩 插件 / 技能 | 动态加载与卸载，飞书 Channel、上下文视图、用量统计、循环检测 |
@@ -305,6 +305,39 @@ src/
 
 ### 真实服务配置
 
-RAG 需要启用 `rag.enabled` 并配置 `rag.embeddingKey`（可在配置中使用 `${DASHSCOPE_API_KEY}` 引用环境变量）。未配置时不注册导入和搜索工具，不生成替代向量。默认不注册 GitHub 示例工具和 Supabase 示例插件；外部工具需接入真实实现。未知模型仅统计 token，费用显示为 0，表示尚未配置价格。
+RAG 需要启用 `rag.enabled` 并配置 `rag.embeddingKey`（可在配置中使用 `${DASHSCOPE_API_KEY}` 引用环境变量）。未配置时不注册导入和搜索工具，不生成替代向量。默认不注册 GitHub 示例工具和 Supabase 示例插件；MCP 外部工具通过 `mcp.servers` 配置连接。未知模型仅统计 token，费用显示为 0，表示尚未配置价格。
 
 已有 `knowledge.db` 若曾使用旧版演示向量，请先备份，再使用真实 embedding 重建知识库，避免混用。
+
+### MCP 服务配置
+
+通信使用已安装的官方 `@modelcontextprotocol/client` SDK（当前锁定 `2.0.0-alpha.2`）。在 `runeclaw.config.json` 中加入：
+
+```json
+{
+    "mcp": {
+        "servers": {
+            "local": {
+                "transport": "stdio",
+                "command": "node",
+                "args": ["/absolute/path/to/mcp-server.js"],
+                "env": { "SERVICE_API_KEY": "${SERVICE_API_KEY}" },
+                "timeout": 15000,
+                "enabled": true
+            },
+            "remote": {
+                "transport": "http",
+                "url": "https://your-service.example/mcp",
+                "headers": { "Authorization": "Bearer ${MCP_TOKEN}" },
+                "enabled": false
+            }
+        }
+    }
+}
+```
+
+以上地址和命令需替换为实际服务。密钥写入 `.env`，配置文件只保留环境变量占位符。stdio 通过程序及参数直接启动，不经过 shell；仅传入 SDK 默认继承的环境和显式配置的 `env`。HTTP 使用 Streamable HTTP，目前不包含 OAuth 登录流程。
+
+未配置 `mcp` 时不连接任何服务。启动时连接启用的服务，失败会单独报告；正常退出、输入关闭、SIGINT 和 SIGTERM 时关闭连接。`timeout` 单位为毫秒，默认 15000，作用于初始化、工具发现和调用。
+
+工具以 `mcp__服务名__工具名` 注册，默认延迟暴露，可通过 `tool_search` 按服务名、完整或部分工具名、用途关键词发现。远端工具默认串行执行，只在服务声明 `readOnlyHint` 时标记只读；该提示不作为授权依据。工具结果保留 `isError`、结构化数据和内容块，并受现有工具输出长度限制。

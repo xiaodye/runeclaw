@@ -84,9 +84,14 @@ export class ToolRegistry {
      */
     async registerMCPServer(serverName: string, client: MCPClient): Promise<string[]> {
         await client.connect();
+        let tools;
+        try {
+            tools = await client.listTools();
+        } catch (error) {
+            await client.close().catch(() => {});
+            throw error;
+        }
         this.mcpClients.push(client);
-
-        const tools = await client.listTools();
         const registered: string[] = [];
 
         for (const tool of tools) {
@@ -98,10 +103,11 @@ export class ToolRegistry {
 
             this.register({
                 name: prefixedName,
-                description: `[MCP:${serverName}] ${tool.description}`,
+                description: `[MCP:${serverName}] ${tool.description ?? tool.name}`,
                 parameters: tool.inputSchema as Record<string, unknown>,
-                isConcurrencySafe: true,
-                isReadOnly: true,
+                // 远端注解不能证明并发安全，默认采用排他执行。
+                isConcurrencySafe: false,
+                isReadOnly: tool.annotations?.readOnlyHint === true,
                 maxResultChars: 8000,
                 profile: ['full'],
                 shouldDefer: true,
@@ -119,10 +125,13 @@ export class ToolRegistry {
 
     /** 关闭所有已连接的 MCP 客户端并清空客户端列表。 */
     async closeAllMCP(): Promise<void> {
-        for (const client of this.mcpClients) {
-            await client.close();
+        const clients = this.mcpClients.splice(0);
+        const results = await Promise.allSettled(clients.map((client) => client.close()));
+        for (const result of results) {
+            if (result.status === 'rejected') {
+                console.error('  [MCP] 关闭连接失败:', result.reason);
+            }
         }
-        this.mcpClients = [];
     }
 
     /**
@@ -199,6 +208,19 @@ export class ToolRegistry {
     }
 
     /**
+     * 统计当前角色和 profile 可使用的 MCP 工具，包含尚未发现的延迟工具。
+     * @returns 可通过工具搜索发现并调用的 MCP 工具数量。
+     */
+    getAvailableMCPToolCount(): number {
+        return this.getAll().filter(
+            (tool) =>
+                tool.name.startsWith('mcp__') &&
+                (!tool.profile || tool.profile.includes(this.activeProfile)) &&
+                canUseTool(this.currentRole, tool.name),
+        ).length;
+    }
+
+    /**
      * 根据 profile、发现状态和角色权限筛选当前可用工具。
      *
      * @returns 当前可暴露给模型的工具定义列表。
@@ -225,7 +247,12 @@ export class ToolRegistry {
      */
     getDeferredToolSummary(): string {
         const deferred = this.getAll().filter((tool) => {
-            return tool.shouldDefer && !this.discoveredTools.has(tool.name);
+            return (
+                tool.shouldDefer &&
+                !this.discoveredTools.has(tool.name) &&
+                (!tool.profile || tool.profile.includes(this.activeProfile)) &&
+                canUseTool(this.currentRole, tool.name)
+            );
         });
 
         if (deferred.length === 0) return '';
@@ -239,32 +266,52 @@ export class ToolRegistry {
     }
 
     /**
-     * 按一个或多个工具名称搜索，并记录命中的工具为已发现。
+     * 按完整名称、服务名或关键词搜索工具，并将命中项标记为已发现。
      *
-     * @param query 工具名称；多个名称可用逗号分隔。
-     * @returns 命中的工具定义列表。
+     * @param query 名称或关键词，支持空格与逗号分隔，忽略大小写。
+     * @returns 按名称匹配优先、关键词命中数排序的工具列表。
      */
     searchTools(query: string): ToolDefinition[] {
-        const q = query.trim();
-        const results: ToolDefinition[] = [];
+        const terms = [
+            ...new Set(
+                query
+                    .trim()
+                    .toLowerCase()
+                    .split(/[\s,]+/)
+                    .filter(Boolean),
+            ),
+        ];
+        if (terms.length === 0) return [];
 
-        // 支持逗号分隔的多个工具名，如 "mcp__github__list_issues,mcp__github__search_repositories"
-        const names = q.includes(',')
-            ? q
-                  .split(',')
-                  .map((n) => n.trim())
-                  .filter(Boolean)
-            : [q];
+        const matches = this.getAll()
+            .filter(
+                (tool) =>
+                    tool.name !== 'tool_search' &&
+                    (!tool.profile || tool.profile.includes(this.activeProfile)) &&
+                    canUseTool(this.currentRole, tool.name),
+            )
+            .map((tool) => {
+                const name = tool.name.toLowerCase();
+                const text = `${name} ${tool.searchHint ?? ''} ${tool.description}`.toLowerCase();
+                const score = terms.reduce(
+                    (total, term) =>
+                        total +
+                        (name === term
+                            ? 100
+                            : name.includes(term)
+                              ? 10
+                              : text.includes(term)
+                                ? 1
+                                : 0),
+                    0,
+                );
+                return { tool, score };
+            })
+            .filter(({ score }) => score > 0)
+            .sort((a, b) => b.score - a.score);
 
-        for (const name of names) {
-            const tool = this.tools.get(name);
-            if (tool && tool.name !== 'tool_search') {
-                results.push(tool);
-                this.discoveredTools.add(tool.name);
-            }
-        }
-
-        return results;
+        for (const { tool } of matches) this.discoveredTools.add(tool.name);
+        return matches.map(({ tool }) => tool);
     }
 
     /**

@@ -120,7 +120,8 @@ function buildConfig(answers: Answers): SuperAgentConfig {
             baseURL: '${LLM_API_BASE}',
             apiKey: '${LLM_API_KEY}',
         },
-        plugins: [{ name: 'supabase', enabled: false, config: {} }],
+        plugins: [],
+        mcp: { servers: {} },
         channels: {
             feishu: {
                 enabled: answers.enableFeishu,
