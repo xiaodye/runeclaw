@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveUserPath } from '../config/paths';
 import type { ModelMessage } from 'ai';
 
-const SESSION_DIR = '.sessions';
+const SESSION_DIR = resolveUserPath('sessions');
 const DEFAULT_SESSION = 'default';
 
 export interface SessionEntry {
@@ -11,6 +12,9 @@ export interface SessionEntry {
 
     /** 写入会话文件时的 ISO 时间戳。 */
     timestamp: string;
+
+    /** 消息写入时的任务工作目录，供恢复时核对。 */
+    cwd?: string;
 
     /** 需要恢复到模型上下文中的消息内容。 */
     message: ModelMessage;
@@ -56,6 +60,7 @@ export class SessionStore {
     append(message: ModelMessage): void {
         const entry: SessionEntry = {
             type: 'message',
+            cwd: process.cwd(),
             timestamp: new Date().toISOString(),
             message,
         };

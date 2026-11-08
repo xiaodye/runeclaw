@@ -7,7 +7,7 @@ import { InitWizard } from './init-wizard';
  *
  * 使用 Ink（React 渲染的 CLI）展示分步表单，引导用户填写模型、API Key、
  * 飞书 Channel 以及用于 RAG 向量化的 DashScope API Key，最后写出
- * `runeclaw.config.json` 与 `.env`。
+ * `~/.runeclaw/config.json` 与 `~/.runeclaw/.env`。
  *
  * @returns
  */

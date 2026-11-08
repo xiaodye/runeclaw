@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import process from 'node:process';
 import { createOpenAI } from '@ai-sdk/openai';
 import fs from 'node:fs';
@@ -54,6 +53,7 @@ import { SpawnContext } from './agents/spawn';
 import { createSpawnTool } from './tools/spawn-tools';
 import { createAgentCommands } from './commands/agents';
 import { loadConfig } from './config/loader';
+import { resolveUserPath } from './config/paths';
 import { c } from './ui/theme';
 import boxen from 'boxen';
 
@@ -81,7 +81,7 @@ registry.register(createMemoryTool(memoryStore));
 // const vectorStore = new VectorStore();
 
 // sqlite 数据库
-const vectorStore = new SqliteVectorStore('knowledge.db');
+const vectorStore = new SqliteVectorStore(resolveUserPath('knowledge.db'));
 const embedFn = config.rag.embeddingKey
     ? createDashScopeEmbedder(config.rag.embeddingKey)
     : undefined;
@@ -90,7 +90,7 @@ if (config.rag.enabled && embedFn) {
 }
 
 // ── Skills ────────────────────────────────────────
-const skillLoader = new SkillLoader('.');
+const skillLoader = new SkillLoader();
 const loadedSkills = skillLoader.load();
 const activeSkills = new Set<string>();
 
@@ -262,10 +262,10 @@ export async function startAgent() {
     // 启动完成，恢复 console 输出（开屏盒子与后续对话正常显示）
     restoreConsole();
 
-    const store = new SessionStore('default');
+    const store = new SessionStore(config.session.id);
     let messages: ModelMessage[] = [];
     const timestamps = new Map<number, number>();
-    const tracker = new UsageTracker('.usage/today.jsonl');
+    const tracker = new UsageTracker(config.usage.trackingFile);
 
     const rl = createInterface({ input: process.stdin, output: process.stdout });
 

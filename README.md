@@ -98,7 +98,7 @@ pnpm link --global
 ### 2. 初始化并启动
 
 ```bash
-runeclaw init       # 运行初始化向导，生成 runeclaw.config.json 与 .env
+runeclaw init       # 运行初始化向导，生成 ~/.runeclaw/config.json 与 .env
 runeclaw            # 启动交互式 Agent
 ```
 
@@ -117,7 +117,7 @@ runeclaw
 | 命令                             | 说明                                                  |
 | -------------------------------- | ----------------------------------------------------- |
 | `runeclaw` / `runeclaw start`    | 启动交互式 Agent（默认）                              |
-| `runeclaw init`                  | 运行初始化向导，生成 `runeclaw.config.json` 与 `.env` |
+| `runeclaw init`                  | 运行初始化向导，生成 `~/.runeclaw/config.json` 与 `.env` |
 | `runeclaw continue`              | 启动 Agent（预留会话续接）                            |
 | `runeclaw help` / `--help`       | 查看帮助                                              |
 | `runeclaw version` / `--version` | 查看版本号                                            |
@@ -196,12 +196,12 @@ runeclaw
 
 初始化后会生成两个文件：
 
-- `runeclaw.config.json`
+- `~/.runeclaw/config.json`
 - `.env`
 
 约定是：
 
-- `runeclaw.config.json` 只保留占位符，不放明文密钥
+- 用户级 `~/.runeclaw/config.json` 支持直接填写 MCP 密钥，也兼容 `${VAR}` 环境变量占位符；文件权限为 `0600`
 - 真正的模型和飞书密钥放在 `.env`
 
 配置文件里的 `${LLM_MODEL}`、`${LLM_API_BASE}`、`${LLM_API_KEY}`、`${FEISHU_APP_ID}`、`${FEISHU_APP_SECRET}` 会在启动时自动从环境变量替换。
@@ -296,7 +296,7 @@ src/
 ## 📝 说明
 
 - 启动时默认**不**自动导入知识库；加 `--rag`（或 `pnpm start:rag`）才会导入 `docs/` 下的 `.md` 文档
-- 当前项目里的飞书配置只应通过 `.env` 提供，不要把 secret 写进 `runeclaw.config.json`
+- 飞书配置只应通过 `~/.runeclaw/.env` 提供，不要把 secret 写进 `~/.runeclaw/config.json`
 - Web 搜索工具会优先使用 `TAVILY_API_KEY`，没有时可用 `SERPER_API_KEY`
 
 ## 许可证
@@ -311,7 +311,7 @@ RAG 需要启用 `rag.enabled` 并配置 `rag.embeddingKey`（可在配置中使
 
 ### MCP 服务配置
 
-通信使用已安装的官方 `@modelcontextprotocol/client` SDK（当前锁定 `2.0.0-alpha.2`）。在 `runeclaw.config.json` 中加入：
+通信使用已安装的官方 `@modelcontextprotocol/client` SDK（当前锁定 `2.0.0-alpha.2`）。在 `~/.runeclaw/config.json` 中加入：
 
 ```json
 {
@@ -336,8 +336,30 @@ RAG 需要启用 `rag.enabled` 并配置 `rag.embeddingKey`（可在配置中使
 }
 ```
 
-以上地址和命令需替换为实际服务。密钥写入 `.env`，配置文件只保留环境变量占位符。stdio 通过程序及参数直接启动，不经过 shell；仅传入 SDK 默认继承的环境和显式配置的 `env`。HTTP 使用 Streamable HTTP，目前不包含 OAuth 登录流程。
+以上地址和命令需替换为实际服务。MCP 密钥可直接填入用户级配置的 `env` 或 `headers`，也可通过 `~/.runeclaw/.env` 和 `${VAR}` 引用。stdio 通过程序及参数直接启动，不经过 shell；仅传入 SDK 默认继承的环境和显式配置的 `env`。HTTP 使用 Streamable HTTP，目前不包含 OAuth 登录流程。
 
 未配置 `mcp` 时不连接任何服务。启动时连接启用的服务，失败会单独报告；正常退出、输入关闭、SIGINT 和 SIGTERM 时关闭连接。`timeout` 单位为毫秒，默认 15000，作用于初始化、工具发现和调用。
 
 工具以 `mcp__服务名__工具名` 注册，默认延迟暴露，可通过 `tool_search` 按服务名、完整或部分工具名、用途关键词发现。远端工具默认串行执行，只在服务声明 `readOnlyHint` 时标记只读；该提示不作为授权依据。工具结果保留 `isError`、结构化数据和内容块，并受现有工具输出长度限制。
+
+## 用户配置与数据目录
+
+RuneClaw 仅使用用户级配置，不自动读取项目配置或当前目录的 `.env`。
+
+```text
+~/.runeclaw/
+├── config.json
+├── .env
+├── skills/
+├── sessions/
+├── memory/
+├── cron/
+├── usage/
+└── knowledge.db
+```
+
+在任意目录运行均使用同一份配置和密钥。配置中的相对存储路径以 `~/.runeclaw/` 为基准；文件工具、Shell 和 `--rag` 导入仍以当前工作目录为基准。会话消息记录包含写入时的工作目录。
+
+首次使用运行 `runeclaw init`。已有旧版配置时，在旧配置所在目录执行 `runeclaw migrate`（源码开发可执行 `pnpm dev migrate`）。迁移复制旧配置、`.env`、技能、会话、记忆、定时任务、用量和知识库，保留来源文件，不覆盖目标已有文件。迁移前请停止旧实例；检测到 SQLite WAL 文件时会拒绝迁移，以免遗漏未合并的数据。
+
+多个目录共用同一套记忆、知识库及默认会话存储；`continue` 仍是预留入口，此次未实现自动恢复会话。

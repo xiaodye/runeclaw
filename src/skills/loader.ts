@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { USER_DIR } from '../config/paths';
 
 export interface SkillDefinition {
     /** skill 的唯一名称，通常来自目录名。 */
@@ -14,11 +15,11 @@ export interface SkillDefinition {
     dirPath: string;
 }
 
-const SKILLS_DIR = '.skills';
+const SKILLS_DIR = 'skills';
 const SKILL_FILE = 'SKILL.md';
 
 export class SkillLoader {
-    /** 项目根目录，`.skills` 会在该目录下查找。 */
+    /** 用户数据根目录，skills 在该目录下查找。 */
     private readonly baseDir: string;
     /** 已加载 skill 表，以 skill 名称索引。 */
     private skills = new Map<string, SkillDefinition>();
@@ -26,19 +27,19 @@ export class SkillLoader {
     /**
      * 创建 skill 加载器。
      *
-     * @param baseDir `.skills` 目录所在的项目根路径。
+     * @param baseDir skills 目录所在的用户数据根路径。
      */
-    constructor(baseDir = '.') {
+    constructor(baseDir = USER_DIR) {
         this.baseDir = baseDir;
     }
 
-    /** 当前项目的 skill 根目录路径。 */
+    /** 用户级 skill 根目录路径。 */
     private get skillsDir(): string {
         return path.join(this.baseDir, SKILLS_DIR);
     }
 
     /**
-     * 扫描 `.skills` 目录并加载带有 `SKILL.md` 的 skill。
+     * 扫描用户级 skills 目录并加载带有 `SKILL.md` 的 skill。
      *
      * @returns
      */
