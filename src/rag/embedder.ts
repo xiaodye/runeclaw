@@ -9,15 +9,6 @@ const DIMS = 128;
 export type EmbeddingFn = (texts: string[]) => Promise<number[][]>;
 
 /**
- * 创建本地 mock embedder，用于无外部 API key 的开发与测试。
- *
- * @returns
- */
-export function createMockEmbedder(): EmbeddingFn {
-    return async (texts: string[]) => texts.map(mockEmbed);
-}
-
-/**
  * 创建 DashScope 兼容 OpenAI embeddings 接口的远程 embedder。
  *
  * @param apiKey DashScope API key，用于远程 embeddings 请求认证。
@@ -81,23 +72,6 @@ export async function embed(fn: EmbeddingFn, texts: string[]): Promise<number[][
     }
 
     return results;
-}
-
-/**
- * 使用确定性哈希方式生成归一化向量，模拟语义 embedding 的调用形态。
- *
- * @param text 待转换为 mock embedding 的文本。
- * @returns
- */
-function mockEmbed(text: string): number[] {
-    const vec = new Array(DIMS).fill(0);
-    for (let i = 0; i < text.length; i++) {
-        const code = text.charCodeAt(i);
-        vec[i % DIMS] += code;
-        vec[(i * 7 + 13) % DIMS] += code * 0.3;
-    }
-    const norm = Math.sqrt(vec.reduce((s, v) => s + v * v, 0)) || 1;
-    return vec.map((v) => v / norm);
 }
 
 /**

@@ -48,5 +48,22 @@
     },
     "usage": {
         "trackingFile": ".usage/today.jsonl"
+    },
+    "mcp": {
+        "servers": {
+            "context7": {
+                "transport": "stdio",
+                "command": "npx",
+                "args": [
+                    "-y",
+                    "@upstash/context7-mcp"
+                ],
+                "env": {
+                    "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"
+                },
+                "timeout": 60000,
+                "enabled": true
+            }
+        }
     }
 }

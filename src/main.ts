@@ -7,8 +7,7 @@ import { createInterface } from 'node:readline';
 import { allTools } from './tools';
 import { agentLoop } from './agent/loop';
 import { ToolDefinition, ToolRegistry } from './tools/registry';
-import { createMockModel, setCacheEnabled } from './mock-model';
-import { MCPClient, MockMCPClient } from './tools/mcp-client';
+import { MCPClient } from './tools/mcp-client';
 import { SessionStore } from './session/store';
 import {
     coreRules,
@@ -31,7 +30,7 @@ import { memoryCommands } from './commands/memory';
 import { createToolSearchTool } from './tools/tool-search';
 import { memoryContext, ragContext } from './context/prompt-pipes';
 import { chunkDocument } from './rag/chunker';
-import { createDashScopeEmbedder, createMockEmbedder, embed } from './rag/embedder';
+import { createDashScopeEmbedder, embed } from './rag/embedder';
 import { VectorStore } from './rag/store';
 import { SqliteVectorStore } from './rag/sqlite-store';
 import { createRagTools } from './tools/rag-tools';
@@ -42,7 +41,6 @@ import { createSkillCommands } from './commands/skill';
 import { PluginManager } from './plugins/manager';
 import { PluginDefinition } from './plugins/types';
 import { createPluginCommands } from './commands/plugin';
-import { supabasePlugin } from './plugins/supabase-plugin';
 import { ChannelGateway } from './channels/gateway';
 import { FeishuChannel } from './channels/feishu';
 import { createChannelCommands } from './commands/channel';
@@ -69,9 +67,6 @@ const provider = createOpenAI({
 
 const model = provider.chat(config.model.name ?? 'deepseek-v4-flash');
 
-// mock
-// const model = createMockModel();
-
 // ── Registry ────────────────────────────────────────
 const registry = new ToolRegistry();
 registry.register(...allTools);
@@ -89,13 +84,9 @@ registry.register(createMemoryTool(memoryStore));
 const vectorStore = new SqliteVectorStore('knowledge.db');
 const embedFn = config.rag.embeddingKey
     ? createDashScopeEmbedder(config.rag.embeddingKey)
-    : createMockEmbedder();
-registry.register(...createRagTools(vectorStore, embedFn));
-
-async function connectMCP() {
-    const mockClient = new MockMCPClient();
-    const tools = await registry.registerMCPServer('github', mockClient);
-    console.log(`  已注册 ${tools.length} 个 Mock MCP 工具`);
+    : undefined;
+if (config.rag.enabled && embedFn) {
+    registry.register(...createRagTools(vectorStore, embedFn));
 }
 
 // ── Skills ────────────────────────────────────────
@@ -105,7 +96,7 @@ const activeSkills = new Set<string>();
 
 // ── Plugins ────────────────────────────────────────
 const pluginManager = new PluginManager(registry);
-const availablePlugins = new Map<string, PluginDefinition>([['supabase', supabasePlugin]]);
+const availablePlugins = new Map<string, PluginDefinition>();
 
 // ── Security: Hook Pipeline ────────────────────────────────────────
 const hookPipeline = new HookPipeline();
@@ -215,8 +206,16 @@ export async function startAgent() {
         };
     })();
 
-    // MCP 加载
-    await connectMCP();
+    for (const [name, server] of Object.entries(config.mcp.servers)) {
+        if (!server.enabled) continue;
+        try {
+            await registry.registerMCPServer(name, new MCPClient(server));
+        } catch (error) {
+            console.error(
+                `  [MCP:${name}] 连接失败: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
+    }
 
     // 加载插件
     console.log('  加载插件...');
@@ -270,17 +269,36 @@ export async function startAgent() {
 
     const rl = createInterface({ input: process.stdin, output: process.stdout });
 
+    let shuttingDown = false;
+
+    /** 在正常退出、输入关闭和终止信号时统一释放后台资源。 */
+    async function shutdown(): Promise<void> {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        cronService.stop();
+        await Promise.allSettled([
+            gateway.stopAll(),
+            pluginManager.unloadAll(),
+            registry.closeAllMCP(),
+        ]);
+        process.exit(0);
+    }
+    rl.once('close', () => {
+        void shutdown();
+    });
+    process.once('SIGINT', () => {
+        void shutdown();
+    });
+    process.once('SIGTERM', () => {
+        void shutdown();
+    });
+
     function ask() {
         rl.question(`\n${c.cyan}❯${c.reset} `, async (input) => {
             const trimmed = input.trim();
             if (trimmed === '/exit') {
                 console.log('Bye!');
-                cronService.stop();
-                await gateway.stopAll();
-                await pluginManager.unloadAll();
-                rl.close();
-                // 强制退出：即使仍有 feishu/MCP/插件等句柄挂着事件循环，也要释放终端
-                process.exit(0);
+                await shutdown();
             }
             if (!trimmed) {
                 ask();
@@ -328,6 +346,7 @@ export async function startAgent() {
 
     const role = registry.getRole();
     const toolCount = registry.getActiveTools().length;
+    const mcpToolCount = registry.getAvailableMCPToolCount();
     const hooks = hookPipeline.list();
     const modelName = (model as any)?.modelId || config.model.name || 'unknown';
 
@@ -336,6 +355,7 @@ export async function startAgent() {
             `  ${c.cyan}model:${c.reset}     ${c.bold}${modelName}${c.reset}`,
             `  ${c.cyan}directory:${c.reset} ${c.bold}${process.cwd()}${c.reset}`,
             `  ${c.cyan}role:${c.reset}      ${c.yellow}${role}${c.reset} · 可用工具: ${c.green}${toolCount}${c.reset} 个`,
+            `  ${c.cyan}MCP:${c.reset}       可用工具: ${c.green}${mcpToolCount}${c.reset} 个（含延迟工具）`,
             '',
             `  ${c.dim}Sub-Agent 深度 ${agentRegistry.getConfig().maxSpawnDepth} / 并发 ${agentRegistry.getConfig().maxConcurrent} · /exit 退出 · /help 命令${c.reset}`,
         ].join('\n'),
@@ -349,13 +369,15 @@ export async function startAgent() {
     );
     console.log(splash);
     console.log(
-        `${c.green}✓ 就绪${c.reset} · ${toolCount} 个工具 · ${availablePlugins.size} 个插件已加载`,
+        `${c.green}✓ 就绪${c.reset} · ${toolCount} 个工具 · ${mcpToolCount} 个 MCP 工具 · ${availablePlugins.size} 个插件已加载`,
     );
     console.log('');
 
     // RAG 知识库：仅在显式传入 --rag 时才自动导入 docs/ 下的文档
     const enableRag = process.argv.includes('--rag');
-    if (enableRag && fs.existsSync('docs')) {
+    if (enableRag && (!config.rag.enabled || !embedFn)) {
+        console.log('  RAG 未启用：请启用 rag.enabled 并配置 rag.embeddingKey 后重试。\n');
+    } else if (enableRag && embedFn && fs.existsSync('docs')) {
         const files = fs.readdirSync('docs').filter((f) => f.endsWith('.md'));
         if (files.length > 0) {
             console.log(`  发现 ${files.length} 个文档，自动导入知识库...`);

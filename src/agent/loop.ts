@@ -139,7 +139,7 @@ export async function agentLoop(
 
         // 把 usage 喂给 tracker；tracker 内部按四类 token 分别累加并算 cost
         const norm = normalizeUsage(stepUsage);
-        const stepRecord = tracker?.record(model?.modelId || 'mock-model', norm);
+        const stepRecord = tracker?.record(model?.modelId || 'unknown', norm);
 
         // cache 命中时才打印一行简洁状态，让 cache hit 立刻可见
         if (stepRecord && (norm.cacheReadTokens > 0 || norm.cacheWriteTokens > 0)) {

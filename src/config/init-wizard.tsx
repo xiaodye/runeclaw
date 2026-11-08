@@ -120,7 +120,8 @@ function buildConfig(answers: Answers): SuperAgentConfig {
             baseURL: '${LLM_API_BASE}',
             apiKey: '${LLM_API_KEY}',
         },
-        plugins: [{ name: 'supabase', enabled: false, config: {} }],
+        plugins: [],
+        mcp: { servers: {} },
         channels: {
             feishu: {
                 enabled: answers.enableFeishu,
@@ -330,7 +331,7 @@ function ReviewList(props: { answers: Answers }): ReactElement {
             : []),
         [
             'DashScope Key (向量化)',
-            answers.dashscopeKey ? '（已填写）' : '（留空，使用本地 mock 向量化）',
+            answers.dashscopeKey ? '（已填写）' : '（留空，RAG 工具不可用）',
         ],
         ['子 Agent 并发数', answers.maxConcurrent || '3'],
     ];
@@ -490,7 +491,7 @@ export function InitWizard(): ReactElement {
             body = (
                 <TextField
                     label="DashScope API Key（向量化）"
-                    description="用于 RAG 的文本 embeddings；留空则使用本地 mock 向量化"
+                    description="用于 RAG 的文本 embeddings；留空则不启用 RAG 工具"
                     placeholder="sk-..."
                     mask
                     value={answers.dashscopeKey}
