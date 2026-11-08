@@ -1,14 +1,14 @@
 import fs from 'node:fs';
 import type { CronJobConfig, RunLog } from './types.js';
 
-const JOBS_FILE = '.cron/jobs.json';
-const LOGS_FILE = '.cron/logs.jsonl';
+const JOBS_FILE = 'cron/jobs.json';
+const LOGS_FILE = 'cron/logs.jsonl';
 
 export class CronStore {
     /**
      * 创建 cron 持久化存储。
      *
-     * @param baseDir `.cron` 目录所在根路径。
+     * @param baseDir `cron` 目录所在根路径。
      */
     constructor(private baseDir: string = '.') {}
 
@@ -25,7 +25,7 @@ export class CronStore {
      * 确保存储目录存在，供读写任务和日志前调用。
      */
     init(): void {
-        const dir = `${this.baseDir}/.cron`;
+        const dir = `${this.baseDir}/cron`;
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     }
 

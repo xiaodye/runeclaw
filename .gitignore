@@ -44,4 +44,11 @@ debug.log
 
 /.sessions
 /.usage
-# /.memory
+/.memory
+
+# Legacy local config and runtime data (now in ~/.runeclaw)
+/.skills
+/.cron
+/knowledge.db
+/knowledge.db-*
+/runeclaw.config.json

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { useState, type ReactElement, type ReactNode } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import { CONFIG_FILE } from './loader';
+import { CONFIG_FILE, ENV_FILE, ensureUserDir } from './paths';
 import type { SuperAgentConfig } from './schema';
 
 /** 表示「自定义模型名」这一选项的哨兵值，避免与真实模型名冲突。 */
@@ -140,7 +140,7 @@ function buildConfig(answers: Answers): SuperAgentConfig {
         rag: { enabled: true, docsDir: 'docs', embeddingKey: '${DASHSCOPE_API_KEY}' },
         cron: { enabled: true, dataDir: '.' },
         session: { id: 'default' },
-        usage: { trackingFile: '.usage/today.jsonl' },
+        usage: { trackingFile: 'usage/today.jsonl' },
     };
 }
 
@@ -194,14 +194,17 @@ function buildEnvContent(answers: Answers): string {
 }
 
 /**
- * 将答案写入 runeclaw.config.json 与 .env。
+ * 将答案写入用户目录的 config.json 与 .env。
  *
  * @param answers 向导收集到的答案。
  * @returns
  */
 function writeFiles(answers: Answers): void {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(buildConfig(answers), null, 2) + '\n');
-    fs.writeFileSync('.env', buildEnvContent(answers));
+    ensureUserDir();
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(buildConfig(answers), null, 2) + '\n', {
+        mode: 0o600,
+    });
+    fs.writeFileSync(ENV_FILE, buildEnvContent(answers), { mode: 0o600 });
 }
 
 /** 表单字段的外壳：渲染标签、可选说明以及下方内容区。 */
@@ -544,7 +547,7 @@ export function InitWizard(): ReactElement {
             body = (
                 <Box flexDirection="column">
                     <Text color="green">✓ {CONFIG_FILE} 已生成</Text>
-                    <Text color="green">✓ .env 已生成</Text>
+                    <Text color="green">✓ ~/.runeclaw/.env 已生成</Text>
                     <Box marginTop={1}>
                         <Text>启动 Agent：</Text>
                         <Text bold color="cyan">
@@ -564,7 +567,9 @@ export function InitWizard(): ReactElement {
                 </Text>
                 <Text bold> 初始化向导</Text>
             </Box>
-            <Text dimColor>配置模型、RAG 向量化与 Channel，生成 runeclaw.config.json 与 .env</Text>
+            <Text dimColor>
+                配置模型、RAG 向量化与 Channel，生成 ~/.runeclaw/config.json 与 .env
+            </Text>
             <Text dimColor>──────────────────────────────────────────────</Text>
             <Box marginTop={1} justifyContent="space-between">
                 <Text color="yellow">{progressText}</Text>

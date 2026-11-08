@@ -56,7 +56,7 @@ export const SessionConfigSchema = z.object({
 });
 
 export const UsageConfigSchema = z.object({
-    trackingFile: z.string().default('.usage/today.jsonl'),
+    trackingFile: z.string().default('usage/today.jsonl'),
 });
 
 /** 本地进程与远程 HTTP 服务共用的连接开关和请求超时。 */

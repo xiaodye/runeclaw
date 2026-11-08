@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { createInterface, type Interface } from 'node:readline';
-import { CONFIG_FILE } from './loader';
+import { CONFIG_FILE, ENV_FILE, ensureUserDir } from './paths';
 import { SuperAgentConfig } from './schema';
 
 /**
@@ -102,10 +102,11 @@ export async function runInit() {
         },
         cron: { enabled: true, dataDir: '.' },
         session: { id: 'default' },
-        usage: { trackingFile: '.usage/today.jsonl' },
+        usage: { trackingFile: 'usage/today.jsonl' },
     };
 
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + '\n');
+    ensureUserDir();
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
     console.log(`\n  ✓ ${CONFIG_FILE} 已生成`);
 
     const envLines: string[] = [];
@@ -117,8 +118,8 @@ export async function runInit() {
         envLines.push(`FEISHU_APP_SECRET=${feishuAppSecret}\n`);
     }
     if (envLines.length > 0) {
-        fs.writeFileSync('.env', envLines.join('\n') + '\n');
-        console.log('  ✓ .env 已生成');
+        fs.writeFileSync(ENV_FILE, envLines.join('\n') + '\n', { mode: 0o600 });
+        console.log('  ✓ ~/.runeclaw/.env 已生成');
     }
 
     console.log('\n  启动 Agent: pnpm start\n');

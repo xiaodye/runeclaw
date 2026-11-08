@@ -29,7 +29,7 @@ export interface MemoryEntry {
     lastReadAt?: number;
 }
 
-const MEMORY_DIR = '.memory';
+const MEMORY_DIR = 'memory';
 const INDEX_FILE = 'MEMORY.md';
 const MAX_INDEX_LINES = 200;
 const MAX_FILE_CHARS = 4000;
