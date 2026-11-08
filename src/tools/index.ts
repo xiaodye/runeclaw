@@ -3,7 +3,7 @@ import { weatherTool, calculatorTool } from './utility-tools';
 import { readFileTool, writeFileTool, editFileTool, listDirectoryTool } from './file-tools';
 import { globTool, grepTool } from './search-tools';
 import { bashTool } from './shell-tools';
-import { pickSearchTool, webFetchTool } from './web-search';
+import { webFetchTool } from './web-search';
 
 export const allTools: ToolDefinition[] = [
     weatherTool,
@@ -15,7 +15,6 @@ export const allTools: ToolDefinition[] = [
     globTool,
     grepTool,
     bashTool,
-    pickSearchTool(),
     webFetchTool,
 ];
 

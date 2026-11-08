@@ -1,34 +1,9 @@
 import fs from 'node:fs';
 import { SuperAgentConfigSchema, type SuperAgentConfig } from './schema';
 
-import { config as loadEnv } from 'dotenv';
-import { CONFIG_FILE, ENV_FILE, ensureUserDir, resolveUserPath } from './paths';
+import { CONFIG_FILE, ensureUserDir, resolveUserPath } from './paths';
 
 export { CONFIG_FILE } from './paths';
-
-const ENV_VAR_RE = /\$\{([A-Z_][A-Z0-9_]*)\}/g;
-
-function substituteEnvVars(obj: unknown): unknown {
-    if (typeof obj === 'string') {
-        return obj.replace(ENV_VAR_RE, (match, name) => {
-            const val = process.env[name];
-            if (val === undefined) {
-                console.warn(`  ⚠ 环境变量 ${name} 未设置，保留原值`);
-                return match;
-            }
-            return val;
-        });
-    }
-    if (Array.isArray(obj)) return obj.map(substituteEnvVars);
-    if (obj !== null && typeof obj === 'object') {
-        const result: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-            result[key] = substituteEnvVars(value);
-        }
-        return result;
-    }
-    return obj;
-}
 
 /**
  * 加载用户配置与密钥，将数据路径解析到用户目录。
@@ -37,7 +12,6 @@ function substituteEnvVars(obj: unknown): unknown {
  */
 export function loadConfig(path = CONFIG_FILE): SuperAgentConfig {
     ensureUserDir();
-    loadEnv({ path: ENV_FILE, quiet: true });
     if (!fs.existsSync(path)) {
         console.log(`  未找到 ${path}，使用默认配置`);
         console.log('  运行 pnpm run init 生成配置文件\n');
@@ -54,9 +28,7 @@ export function loadConfig(path = CONFIG_FILE): SuperAgentConfig {
         process.exit(1);
     }
 
-    const substituted = substituteEnvVars(raw);
-
-    const result = SuperAgentConfigSchema.safeParse(substituted);
+    const result = SuperAgentConfigSchema.safeParse(raw);
     if (!result.success) {
         console.error('  ✗ 配置文件校验失败:');
         for (const issue of result.error.issues) {

@@ -77,7 +77,7 @@ export const MCPServerConfigSchema = z.discriminatedUnion('transport', [
         command: z.string().trim().min(1),
         /** 直接传给服务进程的参数。 */
         args: z.array(z.string()).default([]),
-        /** 显式传给子进程的环境变量，支持配置占位符。 */
+        /** 显式传给子进程的环境变量，值按原文传递。 */
         env: z.record(z.string()).default({}),
     }),
     z.object({
@@ -89,7 +89,7 @@ export const MCPServerConfigSchema = z.discriminatedUnion('transport', [
             .string()
             .url()
             .refine((value) => /^https?:\/\//.test(value), '仅支持 HTTP(S) 地址'),
-        /** 请求头，密钥通过环境变量占位符注入。 */
+        /** 请求头，直接填写认证密钥。 */
         headers: z.record(z.string()).default({}),
     }),
 ]);
@@ -103,9 +103,18 @@ export const MCPConfigSchema = z.object({
     servers: z.record(z.string().regex(/^[A-Za-z0-9_-]+$/), MCPServerConfigSchema).default({}),
 });
 
+/** 网页搜索服务的密钥，优先使用 Tavily。 */
+export const SearchConfigSchema = z.object({
+    /** Tavily 搜索服务 API Key。 */
+    tavilyApiKey: z.string().default(''),
+    /** Serper 搜索服务 API Key。 */
+    serperApiKey: z.string().default(''),
+});
+
 export const SuperAgentConfigSchema = z.object({
     version: z.string().default('1.0'),
     model: ModelConfigSchema.default({}),
+    search: SearchConfigSchema.default({}),
     plugins: z.array(PluginConfigSchema).default([]),
     mcp: MCPConfigSchema.default({}),
     channels: ChannelConfigSchema.default({}),

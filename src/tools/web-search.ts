@@ -3,108 +3,122 @@ import TurndownService from 'turndown';
 
 // ── Tavily（自动挡）──────────────────────────────
 
-export const tavilySearchTool: ToolDefinition = {
-    name: 'web_search',
-    description: '搜索互联网获取最新信息。返回相关网页的标题、链接和内容摘要',
-    parameters: {
-        type: 'object',
-        properties: {
-            query: { type: 'string', description: '搜索关键词' },
-            max_results: { type: 'number', description: '返回结果数量，默认 5' },
+/**
+ * 创建使用指定密钥的 Tavily 工具。
+ * @param apiKey 用户配置中的服务密钥。
+ * @returns
+ */
+function createTavilySearchTool(apiKey: string): ToolDefinition {
+    return {
+        name: 'web_search',
+        description: '搜索互联网获取最新信息。返回相关网页的标题、链接和内容摘要',
+        parameters: {
+            type: 'object',
+            properties: {
+                query: { type: 'string', description: '搜索关键词' },
+                max_results: { type: 'number', description: '返回结果数量，默认 5' },
+            },
+            required: ['query'],
         },
-        required: ['query'],
-    },
-    isConcurrencySafe: true,
-    isReadOnly: true,
-    maxResultChars: 8000,
-    execute: async ({ query, max_results = 5 }: { query: string; max_results?: number }) => {
-        const apiKey = process.env.TAVILY_API_KEY;
-        if (!apiKey) return '[web_search] 未配置 TAVILY_API_KEY，请在 .env 中设置';
+        isConcurrencySafe: true,
+        isReadOnly: true,
+        maxResultChars: 8000,
+        execute: async ({ query, max_results = 5 }: { query: string; max_results?: number }) => {
+            if (!apiKey)
+                return '[web_search] 请在 ~/.runeclaw/config.json 中设置 search.tavilyApiKey';
 
-        const res = await fetch('https://api.tavily.com/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                api_key: apiKey,
-                query,
-                max_results,
-                include_answer: true,
-            }),
-        });
+            const res = await fetch('https://api.tavily.com/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    api_key: apiKey,
+                    query,
+                    max_results,
+                    include_answer: true,
+                }),
+            });
 
-        if (!res.ok) return `[web_search] 请求失败: HTTP ${res.status}`;
+            if (!res.ok) return `[web_search] 请求失败: HTTP ${res.status}`;
 
-        const data = (await res.json()) as any;
-        const lines: string[] = [];
+            const data = (await res.json()) as any;
+            const lines: string[] = [];
 
-        if (data.answer) {
-            lines.push(`## AI 摘要\n${data.answer}\n`);
-        }
+            if (data.answer) {
+                lines.push(`## AI 摘要\n${data.answer}\n`);
+            }
 
-        for (const r of data.results || []) {
-            lines.push(`### ${r.title}`);
-            lines.push(r.url);
-            lines.push(r.content || r.snippet || '');
-            lines.push('');
-        }
+            for (const r of data.results || []) {
+                lines.push(`### ${r.title}`);
+                lines.push(r.url);
+                lines.push(r.content || r.snippet || '');
+                lines.push('');
+            }
 
-        return lines.join('\n') || '没有找到相关结果';
-    },
-};
+            return lines.join('\n') || '没有找到相关结果';
+        },
+    };
+}
 
 // ── Serper（手动挡）──────────────────────────────
 
-export const serperSearchTool: ToolDefinition = {
-    name: 'web_search',
-    description: '搜索互联网获取最新信息。返回 Google 搜索结果的标题、链接和摘要',
-    parameters: {
-        type: 'object',
-        properties: {
-            query: { type: 'string', description: '搜索关键词' },
-            max_results: { type: 'number', description: '返回结果数量，默认 5' },
-        },
-        required: ['query'],
-    },
-    isConcurrencySafe: true,
-    isReadOnly: true,
-    maxResultChars: 8000,
-    execute: async ({ query, max_results = 5 }: { query: string; max_results?: number }) => {
-        const apiKey = process.env.SERPER_API_KEY;
-        if (!apiKey) return '[web_search] 未配置 SERPER_API_KEY，请在 .env 中设置';
-
-        const res = await fetch('https://google.serper.dev/search', {
-            method: 'POST',
-            headers: {
-                'X-API-KEY': apiKey,
-                'Content-Type': 'application/json',
+/**
+ * 创建使用指定密钥的 Serper 工具。
+ * @param apiKey 用户配置中的服务密钥。
+ * @returns
+ */
+function createSerperSearchTool(apiKey: string): ToolDefinition {
+    return {
+        name: 'web_search',
+        description: '搜索互联网获取最新信息。返回 Google 搜索结果的标题、链接和摘要',
+        parameters: {
+            type: 'object',
+            properties: {
+                query: { type: 'string', description: '搜索关键词' },
+                max_results: { type: 'number', description: '返回结果数量，默认 5' },
             },
-            body: JSON.stringify({ q: query, num: max_results }),
-        });
+            required: ['query'],
+        },
+        isConcurrencySafe: true,
+        isReadOnly: true,
+        maxResultChars: 8000,
+        execute: async ({ query, max_results = 5 }: { query: string; max_results?: number }) => {
+            if (!apiKey)
+                return '[web_search] 请在 ~/.runeclaw/config.json 中设置 search.serperApiKey';
 
-        if (!res.ok) return `[web_search] 请求失败: HTTP ${res.status}`;
+            const res = await fetch('https://google.serper.dev/search', {
+                method: 'POST',
+                headers: {
+                    'X-API-KEY': apiKey,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ q: query, num: max_results }),
+            });
 
-        const data = (await res.json()) as any;
-        const lines: string[] = [];
+            if (!res.ok) return `[web_search] 请求失败: HTTP ${res.status}`;
 
-        // Knowledge Graph（如果有）
-        if (data.knowledgeGraph) {
-            const kg = data.knowledgeGraph;
-            lines.push(`## ${kg.title}`);
-            if (kg.description) lines.push(kg.description);
-            lines.push('');
-        }
+            const data = (await res.json()) as any;
+            const lines: string[] = [];
 
-        // Organic Results
-        for (const r of (data.organic || []).slice(0, max_results)) {
-            lines.push(`### ${r.title}`);
-            lines.push(r.link);
-            lines.push(r.snippet || '');
-            lines.push('');
-        }
+            // Knowledge Graph（如果有）
+            if (data.knowledgeGraph) {
+                const kg = data.knowledgeGraph;
+                lines.push(`## ${kg.title}`);
+                if (kg.description) lines.push(kg.description);
+                lines.push('');
+            }
 
-        return lines.join('\n') || '没有找到相关结果';
-    },
-};
+            // Organic Results
+            for (const r of (data.organic || []).slice(0, max_results)) {
+                lines.push(`### ${r.title}`);
+                lines.push(r.link);
+                lines.push(r.snippet || '');
+                lines.push('');
+            }
+
+            return lines.join('\n') || '没有找到相关结果';
+        },
+    };
+}
 
 // ── Web Fetch（手动挡配套）──────────────────────────────
 
@@ -152,11 +166,16 @@ function htmlToMarkdown(html: string): string {
     return turndown.turndown(html);
 }
 
-// ── 根据环境变量选择搜索后端 ──────────────────────────────
-
-export function pickSearchTool(): ToolDefinition {
-    if (process.env.TAVILY_API_KEY) return tavilySearchTool;
-    if (process.env.SERPER_API_KEY) return serperSearchTool;
-    // 都没配就返回 tavily 版（会提示配置 API Key）
-    return tavilySearchTool;
+/**
+ * 根据用户配置选择搜索后端，优先使用 Tavily。
+ * @param config 搜索服务密钥。
+ * @returns
+ */
+export function pickSearchTool(config: {
+    /** Tavily 密钥。 */ tavilyApiKey: string;
+    /** Serper 密钥。 */ serperApiKey: string;
+}): ToolDefinition {
+    if (config.tavilyApiKey) return createTavilySearchTool(config.tavilyApiKey);
+    if (config.serperApiKey) return createSerperSearchTool(config.serperApiKey);
+    return createTavilySearchTool('');
 }
