@@ -2,26 +2,26 @@ import fs from 'node:fs';
 import { useState, type ReactElement, type ReactNode } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import { CONFIG_FILE, ENV_FILE, ensureUserDir } from './paths';
+import { CONFIG_FILE, ensureUserDir } from './paths';
 import type { SuperAgentConfig } from './schema';
 
 /** 表示「自定义模型名」这一选项的哨兵值，避免与真实模型名冲突。 */
 const MODEL_CUSTOM = '__custom__';
 
-/** 模型选择的候选项，value 会被写入 .env 的 LLM_MODEL，说明性文字折叠进 label 展示。 */
+/** 模型选择的候选项，value 会被写入 model.name，说明性文字折叠进 label 展示。 */
 const MODEL_OPTIONS: Array<{ value: string; label: string }> = [
     { value: 'deepseek-v4-flash', label: 'deepseek-v4-flash   推荐 · 均衡' },
     { value: 'deepseek-v4-pro', label: 'deepseek-v4-pro   更强' },
     { value: MODEL_CUSTOM, label: '自定义模型名称' },
 ];
 
-/** 向导收集到的全部答案，最终映射到配置与 .env。 */
+/** 向导收集到的全部答案，最终映射到配置。 */
 interface Answers {
-    /** 已解析的模型名，写入 .env 的 LLM_MODEL。 */
+    /** 已解析的模型名，写入 model.name。 */
     model: string;
-    /** 模型 API 的基础地址，写入 .env 的 LLM_API_BASE。 */
+    /** 模型 API 的基础地址，写入 model.baseURL。 */
     baseURL: string;
-    /** 模型 API Key，写入 .env 的 LLM_API_KEY。 */
+    /** 模型 API Key，写入 model.apiKey。 */
     apiKey: string;
     /** 是否启用飞书 Channel。 */
     enableFeishu: boolean;
@@ -106,7 +106,7 @@ function nextPhase(phase: Phase, customModel: boolean, enableFeishu: boolean): P
 }
 
 /**
- * 依据答案生成面向 DeepSeek 的配置文件；密钥等敏感项仍以环境变量占位符保存。
+ * 依据答案生成面向 DeepSeek 的配置文件；所有设置直接保存到用户配置。
  *
  * @param answers 向导收集到的答案。
  * @returns
@@ -116,17 +116,18 @@ function buildConfig(answers: Answers): SuperAgentConfig {
         version: '1.0',
         model: {
             provider: 'custom',
-            name: '${LLM_MODEL}',
-            baseURL: '${LLM_API_BASE}',
-            apiKey: '${LLM_API_KEY}',
+            name: answers.model,
+            baseURL: answers.baseURL,
+            apiKey: answers.apiKey,
         },
+        search: { tavilyApiKey: '', serperApiKey: '' },
         plugins: [],
         mcp: { servers: {} },
         channels: {
             feishu: {
                 enabled: answers.enableFeishu,
-                appId: '${FEISHU_APP_ID}',
-                appSecret: '${FEISHU_APP_SECRET}',
+                appId: answers.feishuAppId,
+                appSecret: answers.feishuAppSecret,
                 port: 3000,
             },
         },
@@ -137,64 +138,15 @@ function buildConfig(answers: Answers): SuperAgentConfig {
         },
         security: { defaultRole: 'developer', auditLog: true, bashTimestamp: true },
         memory: { dataDir: '.' },
-        rag: { enabled: true, docsDir: 'docs', embeddingKey: '${DASHSCOPE_API_KEY}' },
+        rag: { enabled: true, docsDir: 'docs', embeddingKey: answers.dashscopeKey },
         cron: { enabled: true, dataDir: '.' },
         session: { id: 'default' },
         usage: { trackingFile: 'usage/today.jsonl' },
     };
 }
 
-/** .env 中单个环境变量条目，包含说明注释与键值。 */
-interface EnvEntry {
-    /** 变量名。 */
-    key: string;
-    /** 变量值。 */
-    value: string;
-    /** 写入 `#` 后面的中文说明。 */
-    comment: string;
-}
-
 /**
- * 依据答案生成 .env 的完整内容；每个变量前带一行注释说明，条目之间以空行分隔。
- *
- * @param answers 向导收集到的答案。
- * @returns
- */
-function buildEnvContent(answers: Answers): string {
-    const entries: EnvEntry[] = [
-        { comment: '模型名称（DeepSeek）', key: 'LLM_MODEL', value: answers.model },
-        {
-            comment: '模型 API 基础地址（OpenAI 兼容）',
-            key: 'LLM_API_BASE',
-            value: answers.baseURL,
-        },
-        { comment: '模型 API Key', key: 'LLM_API_KEY', value: answers.apiKey },
-    ];
-    if (answers.enableFeishu && answers.feishuAppId) {
-        entries.push(
-            { comment: '飞书机器人 App ID', key: 'FEISHU_APP_ID', value: answers.feishuAppId },
-            {
-                comment: '飞书机器人 App Secret',
-                key: 'FEISHU_APP_SECRET',
-                value: answers.feishuAppSecret,
-            },
-        );
-    }
-    if (answers.dashscopeKey) {
-        entries.push({
-            comment: 'DashScope API Key（用于 RAG 向量化 embeddings）',
-            key: 'DASHSCOPE_API_KEY',
-            value: answers.dashscopeKey,
-        });
-    }
-    return (
-        entries.map((entry) => `# ${entry.comment}\n${entry.key}=${entry.value}`).join('\n\n') +
-        '\n'
-    );
-}
-
-/**
- * 将答案写入用户目录的 config.json 与 .env。
+ * 将答案写入用户目录的 config.json。
  *
  * @param answers 向导收集到的答案。
  * @returns
@@ -204,7 +156,6 @@ function writeFiles(answers: Answers): void {
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(buildConfig(answers), null, 2) + '\n', {
         mode: 0o600,
     });
-    fs.writeFileSync(ENV_FILE, buildEnvContent(answers), { mode: 0o600 });
 }
 
 /** 表单字段的外壳：渲染标签、可选说明以及下方内容区。 */
@@ -324,7 +275,7 @@ function ReviewList(props: { answers: Answers }): ReactElement {
     const rows: Array<[string, string]> = [
         ['模型', answers.model],
         ['API Base URL', answers.baseURL || '（默认 https://api.deepseek.com）'],
-        ['LLM API Key', answers.apiKey ? '（已填写）' : '（留空，读取环境变量 LLM_API_KEY）'],
+        ['LLM API Key', answers.apiKey ? '（已填写）' : '（留空，稍后在配置中填写）'],
         ['飞书 Channel', answers.enableFeishu ? '启用' : '关闭'],
         ...(answers.enableFeishu
             ? ([
@@ -448,7 +399,7 @@ export function InitWizard(): ReactElement {
             body = (
                 <TextField
                     label="LLM API Key"
-                    description="留空则运行时从环境变量 LLM_API_KEY 读取"
+                    description="直接保存到用户配置；留空可稍后填写"
                     placeholder="sk-..."
                     mask
                     value={answers.apiKey}
@@ -547,7 +498,6 @@ export function InitWizard(): ReactElement {
             body = (
                 <Box flexDirection="column">
                     <Text color="green">✓ {CONFIG_FILE} 已生成</Text>
-                    <Text color="green">✓ ~/.runeclaw/.env 已生成</Text>
                     <Box marginTop={1}>
                         <Text>启动 Agent：</Text>
                         <Text bold color="cyan">
@@ -567,9 +517,7 @@ export function InitWizard(): ReactElement {
                 </Text>
                 <Text bold> 初始化向导</Text>
             </Box>
-            <Text dimColor>
-                配置模型、RAG 向量化与 Channel，生成 ~/.runeclaw/config.json 与 .env
-            </Text>
+            <Text dimColor>配置模型、RAG 向量化与 Channel，生成 ~/.runeclaw/config.json</Text>
             <Text dimColor>──────────────────────────────────────────────</Text>
             <Box marginTop={1} justifyContent="space-between">
                 <Text color="yellow">{progressText}</Text>

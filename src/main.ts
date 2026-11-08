@@ -4,6 +4,7 @@ import fs from 'node:fs';
 
 import { createInterface } from 'node:readline';
 import { allTools } from './tools';
+import { pickSearchTool } from './tools/web-search';
 import { agentLoop } from './agent/loop';
 import { ToolDefinition, ToolRegistry } from './tools/registry';
 import { MCPClient } from './tools/mcp-client';
@@ -69,7 +70,7 @@ const model = provider.chat(config.model.name ?? 'deepseek-v4-flash');
 
 // ── Registry ────────────────────────────────────────
 const registry = new ToolRegistry();
-registry.register(...allTools);
+registry.register(...allTools, pickSearchTool(config.search));
 registry.register(createToolSearchTool(registry));
 
 // ── Memory ────────────────────────────────────────
@@ -161,13 +162,9 @@ const gateway = new ChannelGateway({
     buildSystem: () => builder.build(makePromptCtx()),
 });
 
-const FEISHU_PORT = Number(process.env.FEISHU_PORT || '3000');
-const feishuChannel = new FeishuChannel({
-    appId: process.env.FEISHU_APP_ID || '',
-    appSecret: process.env.FEISHU_APP_SECRET || '',
-    port: FEISHU_PORT,
-});
-gateway.register(feishuChannel);
+if (config.channels.feishu.enabled) {
+    gateway.register(new FeishuChannel(config.channels.feishu));
+}
 
 // ── Commands ────────────────────────────────────────
 const dispatch = createDispatcher([

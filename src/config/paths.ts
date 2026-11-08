@@ -6,8 +6,6 @@ import { mkdirSync } from 'node:fs';
 export const USER_DIR = join(homedir(), '.runeclaw');
 /** 用户级配置文件路径。 */
 export const CONFIG_FILE = join(USER_DIR, 'config.json');
-/** 用户密钥文件路径，不读取当前工作目录的 .env。 */
-export const ENV_FILE = join(USER_DIR, '.env');
 
 /** 创建仅当前用户可访问的配置目录。 */
 export function ensureUserDir(): void {

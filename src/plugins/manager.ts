@@ -35,10 +35,10 @@ export class PluginManager {
             throw new Error(`插件 "${definition.name}" 已加载`);
         }
 
-        const resolvedConfig = this.resolveEnvVars({
+        const resolvedConfig = {
             ...definition.config,
             ...config,
-        });
+        };
 
         const registeredTools: string[] = [];
 
@@ -61,7 +61,7 @@ export class PluginManager {
                 }
             },
             /**
-             * 返回已解析环境变量后的插件配置。
+             * 返回合并后的插件配置，字符串按原文使用。
              *
              * @returns
              */
@@ -160,24 +160,5 @@ export class PluginManager {
             description: p.definition.description,
             tools: p.tools,
         }));
-    }
-
-    /**
-     * 将形如 `${ENV_NAME}` 的配置值替换为当前进程环境变量。
-     *
-     * @param config 插件默认配置与运行时配置的合并结果。
-     * @returns
-     */
-    private resolveEnvVars(config: PluginConfig): PluginConfig {
-        const resolved: PluginConfig = {};
-        for (const [key, value] of Object.entries(config)) {
-            if (typeof value === 'string' && value.startsWith('${') && value.endsWith('}')) {
-                const envKey = value.slice(2, -1);
-                resolved[key] = process.env[envKey] || '';
-            } else {
-                resolved[key] = value;
-            }
-        }
-        return resolved;
     }
 }

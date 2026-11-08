@@ -8,7 +8,7 @@ const HELP_TEXT = `RuneClaw — 本地 AI Agent 运行时
   runeclaw [命令]
 
 命令:
-  init        运行初始化向导，生成 ~/.runeclaw/config.json 与 .env
+  init        运行初始化向导，生成 ~/.runeclaw/config.json
   migrate     将当前目录的旧配置和运行数据复制到用户目录
   start       启动交互式 Agent（默认命令）
   continue    启动 Agent（与 start 等价，预留会话续接）

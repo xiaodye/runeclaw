@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { createInterface, type Interface } from 'node:readline';
-import { CONFIG_FILE, ENV_FILE, ensureUserDir } from './paths';
+import { CONFIG_FILE, ensureUserDir } from './paths';
 import { SuperAgentConfig } from './schema';
 
 /**
@@ -40,7 +40,7 @@ async function selectModelName(rl: Interface): Promise<string> {
 }
 
 /**
- * 生成默认面向 DeepSeek 的配置文件，配置文件只保留环境变量占位符。
+ * 生成默认面向 DeepSeek 的配置文件，所有设置直接保存到用户配置。
  *
  * @returns
  */
@@ -60,7 +60,7 @@ export async function runInit() {
 
     const modelName = await selectModelName(rl);
     const baseURL = await askQuestion(rl, '  API Base URL', 'https://api.deepseek.com');
-    const apiKey = await askQuestion(rl, '\n  API Key (留空则从环境变量 LLM_API_KEY 读取): ');
+    const apiKey = await askQuestion(rl, '\n  API Key (留空可稍后在配置中填写): ');
 
     const enableFeishu =
         (await askQuestion(rl, '\n  启用飞书 Channel? (y/N): ')).toLowerCase() === 'y';
@@ -78,17 +78,18 @@ export async function runInit() {
         version: '1.0',
         model: {
             provider: 'custom',
-            name: '${LLM_MODEL}',
-            baseURL: '${LLM_API_BASE}',
-            apiKey: '${LLM_API_KEY}',
+            name: modelName,
+            baseURL,
+            apiKey,
         },
+        search: { tavilyApiKey: '', serperApiKey: '' },
         plugins: [],
         mcp: { servers: {} },
         channels: {
             feishu: {
                 enabled: enableFeishu,
-                appId: '${FEISHU_APP_ID}',
-                appSecret: '${FEISHU_APP_SECRET}',
+                appId: feishuAppId,
+                appSecret: feishuAppSecret,
                 port: 3000,
             },
         },
@@ -98,7 +99,7 @@ export async function runInit() {
         rag: {
             enabled: true,
             docsDir: 'docs',
-            embeddingKey: '${DASHSCOPE_API_KEY}',
+            embeddingKey: '',
         },
         cron: { enabled: true, dataDir: '.' },
         session: { id: 'default' },
@@ -108,19 +109,6 @@ export async function runInit() {
     ensureUserDir();
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
     console.log(`\n  ✓ ${CONFIG_FILE} 已生成`);
-
-    const envLines: string[] = [];
-    envLines.push(`LLM_MODEL=${modelName}\n`);
-    envLines.push(`LLM_API_BASE=${baseURL}\n`);
-    envLines.push(`LLM_API_KEY=${apiKey}\n`);
-    if (enableFeishu && feishuAppId) {
-        envLines.push(`FEISHU_APP_ID=${feishuAppId}\n`);
-        envLines.push(`FEISHU_APP_SECRET=${feishuAppSecret}\n`);
-    }
-    if (envLines.length > 0) {
-        fs.writeFileSync(ENV_FILE, envLines.join('\n') + '\n', { mode: 0o600 });
-        console.log('  ✓ ~/.runeclaw/.env 已生成');
-    }
 
     console.log('\n  启动 Agent: pnpm start\n');
     rl.close();

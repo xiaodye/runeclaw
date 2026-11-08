@@ -98,7 +98,7 @@ pnpm link --global
 ### 2. 初始化并启动
 
 ```bash
-runeclaw init       # 运行初始化向导，生成 ~/.runeclaw/config.json 与 .env
+runeclaw init       # 运行初始化向导，生成 ~/.runeclaw/config.json
 runeclaw            # 启动交互式 Agent
 ```
 
@@ -117,7 +117,7 @@ runeclaw
 | 命令                             | 说明                                                  |
 | -------------------------------- | ----------------------------------------------------- |
 | `runeclaw` / `runeclaw start`    | 启动交互式 Agent（默认）                              |
-| `runeclaw init`                  | 运行初始化向导，生成 `~/.runeclaw/config.json` 与 `.env` |
+| `runeclaw init`                  | 运行初始化向导，生成 `~/.runeclaw/config.json` |
 | `runeclaw continue`              | 启动 Agent（预留会话续接）                            |
 | `runeclaw help` / `--help`       | 查看帮助                                              |
 | `runeclaw version` / `--version` | 查看版本号                                            |
@@ -194,34 +194,32 @@ runeclaw
 
 ## ⚙️ 配置说明
 
-初始化后会生成两个文件：
+初始化只生成 `~/.runeclaw/config.json`，模型、飞书、搜索、RAG 和 MCP 的设置与密钥都直接写在该文件中。文件权限为 `0600`，用户目录权限为 `0700`。密钥以明文保存，请勿分享完整配置。
 
-- `~/.runeclaw/config.json`
-- `.env`
+不加载 `.env`，不替换 `${VAR}` 占位符。配置示例：
 
-约定是：
-
-- 用户级 `~/.runeclaw/config.json` 支持直接填写 MCP 密钥，也兼容 `${VAR}` 环境变量占位符；文件权限为 `0600`
-- 真正的模型和飞书密钥放在 `.env`
-
-配置文件里的 `${LLM_MODEL}`、`${LLM_API_BASE}`、`${LLM_API_KEY}`、`${FEISHU_APP_ID}`、`${FEISHU_APP_SECRET}` 会在启动时自动从环境变量替换。
-
-### 推荐的 `.env`
-
-```bash
-LLM_MODEL=deepseek-v4-flash
-LLM_API_BASE=https://api.deepseek.com
-LLM_API_KEY=your-deepseek-api-key
-
-FEISHU_APP_ID=cli_xxx
-FEISHU_APP_SECRET=xxx
-
-DASHSCOPE_API_KEY=your-dashscope-api-key-for-embeddings
-
-TAVILY_API_KEY=
-# 或者
-SERPER_API_KEY=
+```json
+{
+    "model": {
+        "provider": "custom",
+        "name": "deepseek-v4-flash",
+        "baseURL": "https://api.deepseek.com",
+        "apiKey": "your-model-api-key"
+    },
+    "channels": {
+        "feishu": {
+            "enabled": false,
+            "appId": "",
+            "appSecret": "",
+            "port": 3000
+        }
+    },
+    "rag": { "embeddingKey": "your-dashscope-api-key" },
+    "search": { "tavilyApiKey": "your-tavily-api-key", "serperApiKey": "" }
+}
 ```
+
+搜索优先使用 Tavily，未配置时使用 Serper。MCP 的 `env` 表示传给子进程的环境变量，值直接填写在 JSON 中。
 
 ### 模型选择
 
@@ -296,7 +294,7 @@ src/
 ## 📝 说明
 
 - 启动时默认**不**自动导入知识库；加 `--rag`（或 `pnpm start:rag`）才会导入 `docs/` 下的 `.md` 文档
-- 飞书配置只应通过 `~/.runeclaw/.env` 提供，不要把 secret 写进 `~/.runeclaw/config.json`
+- 飞书通过 `channels.feishu` 配置，只有 `enabled: true` 时启动
 - Web 搜索工具会优先使用 `TAVILY_API_KEY`，没有时可用 `SERPER_API_KEY`
 
 ## 许可证
@@ -305,7 +303,7 @@ src/
 
 ### 真实服务配置
 
-RAG 需要启用 `rag.enabled` 并配置 `rag.embeddingKey`（可在配置中使用 `${DASHSCOPE_API_KEY}` 引用环境变量）。未配置时不注册导入和搜索工具，不生成替代向量。默认不注册 GitHub 示例工具和 Supabase 示例插件；MCP 外部工具通过 `mcp.servers` 配置连接。未知模型仅统计 token，费用显示为 0，表示尚未配置价格。
+RAG 需要启用 `rag.enabled` 并配置 `rag.embeddingKey`（直接填写密钥）。未配置时不注册导入和搜索工具，不生成替代向量。默认不注册 GitHub 示例工具和 Supabase 示例插件；MCP 外部工具通过 `mcp.servers` 配置连接。未知模型仅统计 token，费用显示为 0，表示尚未配置价格。
 
 已有 `knowledge.db` 若曾使用旧版演示向量，请先备份，再使用真实 embedding 重建知识库，避免混用。
 
@@ -321,14 +319,14 @@ RAG 需要启用 `rag.enabled` 并配置 `rag.embeddingKey`（可在配置中使
                 "transport": "stdio",
                 "command": "node",
                 "args": ["/absolute/path/to/mcp-server.js"],
-                "env": { "SERVICE_API_KEY": "${SERVICE_API_KEY}" },
+                "env": { "SERVICE_API_KEY": "your-service-api-key" },
                 "timeout": 15000,
                 "enabled": true
             },
             "remote": {
                 "transport": "http",
                 "url": "https://your-service.example/mcp",
-                "headers": { "Authorization": "Bearer ${MCP_TOKEN}" },
+                "headers": { "Authorization": "Bearer your-mcp-token" },
                 "enabled": false
             }
         }
@@ -336,7 +334,7 @@ RAG 需要启用 `rag.enabled` 并配置 `rag.embeddingKey`（可在配置中使
 }
 ```
 
-以上地址和命令需替换为实际服务。MCP 密钥可直接填入用户级配置的 `env` 或 `headers`，也可通过 `~/.runeclaw/.env` 和 `${VAR}` 引用。stdio 通过程序及参数直接启动，不经过 shell；仅传入 SDK 默认继承的环境和显式配置的 `env`。HTTP 使用 Streamable HTTP，目前不包含 OAuth 登录流程。
+以上地址和命令需替换为实际服务。MCP 密钥可直接填入用户级配置的 `env` 或 `headers`，不进行环境变量占位符替换。stdio 通过程序及参数直接启动，不经过 shell；仅传入 SDK 默认继承的环境和显式配置的 `env`。HTTP 使用 Streamable HTTP，目前不包含 OAuth 登录流程。
 
 未配置 `mcp` 时不连接任何服务。启动时连接启用的服务，失败会单独报告；正常退出、输入关闭、SIGINT 和 SIGTERM 时关闭连接。`timeout` 单位为毫秒，默认 15000，作用于初始化、工具发现和调用。
 
@@ -349,7 +347,6 @@ RuneClaw 仅使用用户级配置，不自动读取项目配置或当前目录�
 ```text
 ~/.runeclaw/
 ├── config.json
-├── .env
 ├── skills/
 ├── sessions/
 ├── memory/
@@ -360,6 +357,8 @@ RuneClaw 仅使用用户级配置，不自动读取项目配置或当前目录�
 
 在任意目录运行均使用同一份配置和密钥。配置中的相对存储路径以 `~/.runeclaw/` 为基准；文件工具、Shell 和 `--rag` 导入仍以当前工作目录为基准。会话消息记录包含写入时的工作目录。
 
-首次使用运行 `runeclaw init`。已有旧版配置时，在旧配置所在目录执行 `runeclaw migrate`（源码开发可执行 `pnpm dev migrate`）。迁移复制旧配置、`.env`、技能、会话、记忆、定时任务、用量和知识库，保留来源文件，不覆盖目标已有文件。迁移前请停止旧实例；检测到 SQLite WAL 文件时会拒绝迁移，以免遗漏未合并的数据。
+首次使用运行 `runeclaw init`。已有旧版配置时，在旧配置所在目录执行 `runeclaw migrate`（源码开发可执行 `pnpm dev migrate`）。迁移将旧配置中的占位符按旧 `.env` 解析成实际值，并复制技能、会话、记忆、定时任务、用量和知识库，保留来源文件，不覆盖目标已有文件。迁移前请停止旧实例；检测到 SQLite WAL 文件时会拒绝迁移，以免遗漏未合并的数据。
 
 多个目录共用同一套记忆、知识库及默认会话存储；`continue` 仍是预留入口，此次未实现自动恢复会话。
+
+旧用户配置仍使用 `~/.runeclaw/.env` 时，先运行 `runeclaw migrate`，将值合并进用户配置。未解析的占位符会阻止迁移；迁移保留旧文件，确认后可删除 `.env`。
